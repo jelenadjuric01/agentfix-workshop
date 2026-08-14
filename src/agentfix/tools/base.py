@@ -86,9 +86,7 @@ class ToolRegistry:
 
         try:
             result = tool.run(**call.arguments)
-        except TypeError as error:
-            return ToolOutcome(call.id, call.name, ToolResult(False, f"Bad arguments: {error}"))
-        except Exception as error:  # noqa: BLE001 - a tool crash becomes an observation
+        except Exception as error:  # a tool crash must not kill the run
             return ToolOutcome(
                 call.id,
                 call.name,

@@ -1,5 +1,3 @@
-from typing import ClassVar
-
 from agentfix.llm.types import ToolCall
 from agentfix.tools.base import ToolRegistry, ToolResult, truncate
 
@@ -7,7 +5,7 @@ from agentfix.tools.base import ToolRegistry, ToolResult, truncate
 class EchoTool:
     name = "echo"
     description = "Echo a message back."
-    parameters: ClassVar[dict] = {
+    parameters = {
         "type": "object",
         "properties": {"message": {"type": "string"}},
         "required": ["message"],
@@ -68,11 +66,21 @@ def test_missing_required_argument_becomes_an_observation():
     assert "message" in outcome.result.content
 
 
+def test_unexpected_argument_becomes_an_observation():
+    registry = ToolRegistry([EchoTool()])
+    outcome = registry.dispatch(
+        ToolCall(id="c1", name="echo", arguments={"message": "hi", "extra": "nope"})
+    )
+
+    assert outcome.result.ok is False
+    assert "extra" in outcome.result.content
+
+
 def test_tool_exception_becomes_an_observation():
     class BoomTool:
         name = "boom"
         description = "Always explodes."
-        parameters: ClassVar[dict] = {"type": "object", "properties": {}}
+        parameters = {"type": "object", "properties": {}}
 
         def run(self) -> ToolResult:
             raise RuntimeError("kaboom")
