@@ -1,0 +1,6 @@
+{
+  "task_id": "03-parser",
+  "test_command": ["-m", "pytest", "-q"],
+  "expected_failures": ["test_parse_skips_comments", "test_parse_trims_whitespace"],
+  "prompt": "The test suite for this project is failing. Find the bug and fix it."
+}

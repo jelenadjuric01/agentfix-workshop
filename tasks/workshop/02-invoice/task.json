@@ -1,0 +1,6 @@
+{
+  "task_id": "02-invoice",
+  "test_command": ["-m", "pytest", "-q"],
+  "expected_failures": ["test_invoice_total_applies_bulk_discount"],
+  "prompt": "The test suite for this project is failing. Find the bug and fix it."
+}

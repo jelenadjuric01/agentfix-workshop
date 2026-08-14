@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 from agentfix.tasks.loader import load_task, workspace
 
 FIXTURE = Path("tasks/workshop/01-shopcart")
@@ -37,3 +39,28 @@ def test_fixture_starts_red():
     with workspace(task) as work_dir:
         result = SubprocessBackend().run(work_dir, task.test_command, timeout_s=30)
     assert result.passed is False
+
+
+@pytest.mark.parametrize(
+    "task_dir",
+    ["tasks/workshop/01-shopcart", "tasks/workshop/02-invoice", "tasks/workshop/03-parser"],
+)
+def test_every_workshop_fixture_starts_red(task_dir):
+    from agentfix.sandbox.subprocess_backend import SubprocessBackend
+
+    task = load_task(Path(task_dir))
+    with workspace(task) as work_dir:
+        result = SubprocessBackend().run(work_dir, task.test_command, timeout_s=30)
+    assert result.passed is False
+
+
+def test_02_invoice_bug_is_not_in_the_file_the_test_names():
+    """The pedagogical contract of fixture 02 — asserted so it cannot silently regress."""
+    task = load_task(Path("tasks/workshop/02-invoice"))
+    failing_test_file = (task.template_dir / "tests" / "test_invoice.py").read_text(
+        encoding="utf-8"
+    )
+    buggy_file = (task.template_dir / "billing" / "discounts.py").read_text(encoding="utf-8")
+    assert "discounts" not in failing_test_file
+    assert "quantity > BULK_THRESHOLD" in buggy_file
+    assert ">=" not in buggy_file
