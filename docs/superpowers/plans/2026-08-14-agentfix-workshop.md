@@ -22,7 +22,7 @@
 - **Env vars:** `MELLUM_BASE_URL`, `MELLUM_MODEL`, `AGENTFIX_SANDBOX` (`subprocess` | `docker`).
 - **Message history is strictly append-only.** Never rewrite, reorder, or drop earlier messages — it invalidates Ollama's KV prefix cache and makes every turn pay full prefill (~480 tok/s measured).
 - **Truncation limits:** `read_file` output 4000 chars; tool/test output 2000 chars. Enforced where the string is produced, with a literal `\n[...truncated]` marker.
-- **`max_steps` default: 6.** Hard cap.
+- **`max_steps` default: 10.** Hard cap. (Raised from 6 after measurement — see spec.)
 - **Sync only.** No `async`/`await` anywhere.
 - **Style:** type annotations on all signatures, `@dataclass(frozen=True)` for data, snake_case, no comments except where logic is non-obvious. `ruff` and `black` clean.
 - **Coverage:** ≥80% on `src/agentfix`.
@@ -1534,7 +1534,7 @@ git commit -m "feat: task loader with immutable fixtures and the 01-shopcart tas
 - Produces:
   - `TraceEvent(step: int, kind: str, name: str, detail: str, prompt_tokens: int, latency_s: float)`
   - `Tracer(verbose: bool = False)` with `events: list[TraceEvent]`, `record(event) -> None`, `as_json() -> list[dict]`
-  - `MAX_STEPS: int = 6`
+  - `MAX_STEPS: int = 10`
   - `system_prompt(registry: ToolRegistry) -> str`, `task_prompt(task: Task) -> str`
   - `is_done(run_tests: RunTestsTool) -> bool`
   - `AgentResult(task_id, solved, steps_used, prompt_tokens, completion_tokens, duration_s, trace)`
@@ -1783,7 +1783,7 @@ from agentfix.tasks.loader import Task
 from agentfix.tools.base import ToolRegistry
 from agentfix.tools.tests_tool import RunTestsTool
 
-MAX_STEPS = 6
+MAX_STEPS = 10
 
 
 @dataclass(frozen=True)

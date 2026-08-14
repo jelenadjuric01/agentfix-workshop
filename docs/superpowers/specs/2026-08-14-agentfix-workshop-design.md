@@ -194,7 +194,7 @@ model-written code, here is what that means, here is what production agents do a
 ### Agent loop
 
 ```python
-def run_agent(task, llm, tools, max_steps=6, tracer=None) -> AgentResult:
+def run_agent(task, llm, tools, max_steps=10, tracer=None) -> AgentResult:
     messages = [system_prompt(tools), task_prompt(task)]
 
     for step in range(max_steps):
@@ -217,8 +217,11 @@ Decisions:
 - **Stop condition is verification by execution.** The agent is done when `run_tests` passes — not
   when the model stops calling tools, and not when it says "DONE". This is the highest-value idea
   in the workshop and the difference between a demo and something trustworthy.
-- **Bounded by construction.** `max_steps=6` is a hard cap. An unbounded agent is an unbounded
-  wait and an unbounded bill.
+- **Bounded by construction.** `max_steps=10` is a hard cap. An unbounded agent is an unbounded
+  wait and an unbounded bill. (Raised from 6 after measurement: this tool granularity needs
+  `run_tests` + `list_files` + one `read_file` per implicated file + `write_file` + a verifying
+  `run_tests` — 8 steps for a three-file read — so 6 made the demo task unsolvable by
+  construction. The teaching point, a bounded budget, is unchanged.)
 - **Loop guard.** Identical tool + identical args twice in a row → inject an observation saying so
   instead of re-executing. Small models get stuck re-reading the same file. Framed honestly as a
   workaround for model capability, not architecture.
