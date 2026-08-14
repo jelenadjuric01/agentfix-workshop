@@ -11,6 +11,8 @@ from agentfix.tools.base import ToolRegistry
 from agentfix.tools.tests_tool import RunTestsTool
 
 MAX_STEPS = 10
+MAX_GUARD_HITS = 3
+NUDGE = "The tests have not passed. Read the latest failure and write a fix."
 
 
 @dataclass(frozen=True)
@@ -22,6 +24,7 @@ class AgentResult:
     completion_tokens: int
     duration_s: float
     trace: tuple[TraceEvent, ...]
+    peak_prompt_tokens: int = 0
 
 
 def system_prompt(registry: ToolRegistry) -> str:
@@ -54,6 +57,20 @@ def _call_signature(call: ToolCall) -> tuple[str, str]:
     return call.name, repr(sorted(call.arguments.items()))
 
 
+def _guard_observation(name: str, hits: int) -> str:
+    if hits == 1:
+        return (
+            f"You already called {name} with these exact arguments and got the result above. "
+            "Try a different tool or different arguments."
+        )
+    return (
+        f"You have now called {name} with identical arguments {hits + 1} times in a row and it "
+        "was not executed. Call a different tool or use different arguments — read the file the "
+        f"failure names, or call write_file with a fix. After {MAX_GUARD_HITS} repeats this run "
+        "is abandoned."
+    )
+
+
 def run_agent(
     task: Task,
     work_dir: Path,
@@ -71,7 +88,9 @@ def run_agent(
 
     prompt_tokens = 0
     completion_tokens = 0
+    peak_prompt_tokens = 0
     previous_signature: tuple[str, str] | None = None
+    guard_hits = 0
     steps_used = 0
     started = time.time()
 
@@ -84,6 +103,7 @@ def run_agent(
 
         prompt_tokens += reply.prompt_tokens
         completion_tokens += reply.completion_tokens
+        peak_prompt_tokens = max(peak_prompt_tokens, reply.prompt_tokens)
         tracer.record(
             TraceEvent(
                 step=step,
@@ -99,28 +119,43 @@ def run_agent(
             for call in reply.tool_calls:
                 signature = _call_signature(call)
                 if signature == previous_signature:
+                    guard_hits += 1
                     messages.append(
                         {
                             "role": "tool",
                             "tool_call_id": call.id,
                             "name": call.name,
-                            "content": (
-                                f"You already called {call.name} with these exact arguments and "
-                                "got the result above. Try a different tool or different arguments."
-                            ),
+                            "content": _guard_observation(call.name, guard_hits),
                         }
+                    )
+                    tracer.record(
+                        TraceEvent(
+                            step=step,
+                            kind="tool",
+                            name=call.name,
+                            detail=f"guarded — identical call #{guard_hits + 1} in a row",
+                            prompt_tokens=0,
+                            latency_s=0.0,
+                        )
                     )
                     continue
 
+                guard_hits = 0
                 previous_signature = signature
                 # TODO(stage-2): dispatch the call through the registry and append the
                 # resulting tool message to `messages`. Keep the tool_call_id.
                 raise NotImplementedError("stage 2: dispatch the tool call")
+
+            if guard_hits >= MAX_GUARD_HITS:
+                break
             continue
 
         if is_done(run_tests):
             break
-        break
+
+        # A text-only reply is NOT a stop condition: the model may have given up, or claimed
+        # a fix it never verified. Only passing tests end the run, so nudge and spend a step.
+        messages.append({"role": "user", "content": NUDGE})
 
     return AgentResult(
         task_id=task.task_id,
@@ -130,6 +165,7 @@ def run_agent(
         completion_tokens=completion_tokens,
         duration_s=round(time.time() - started, 2),
         trace=tuple(tracer.events),
+        peak_prompt_tokens=peak_prompt_tokens,
     )
 
 

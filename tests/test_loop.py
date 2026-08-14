@@ -71,9 +71,84 @@ def test_agent_is_not_solved_when_the_model_merely_claims_success():
             ]
         )
 
-        result = run_agent(task, work_dir, llm, registry, run_tests)
+        result = run_agent(task, work_dir, llm, registry, run_tests, max_steps=2)
 
     assert result.solved is False
+
+
+def test_a_text_only_reply_does_not_end_the_run_while_the_tests_still_fail():
+    """The stop condition is verification, not the model running out of things to say."""
+    task = load_task(FIXTURE)
+    with workspace(task) as work_dir:
+        registry, run_tests = _build(work_dir, task)
+        llm = FakeLLMClient(
+            [
+                assistant_tool_call("run_tests", {}, call_id="c1"),
+                assistant_text("The bug is the stray subtraction in cart.py."),
+                assistant_tool_call(
+                    "write_file", {"path": "shopcart/cart.py", "content": FIXED_CART}, call_id="c2"
+                ),
+                assistant_tool_call("run_tests", {}, call_id="c3"),
+                assistant_text("fixed"),
+            ]
+        )
+
+        result = run_agent(task, work_dir, llm, registry, run_tests)
+
+    assert result.solved is True
+    assert result.steps_used == 5, "the diagnosis-only turn must not have ended the run"
+    nudge = llm.calls[2][-1]
+    assert nudge["role"] == "user"
+    assert "have not passed" in nudge["content"]
+
+
+def test_repeated_identical_calls_abandon_the_run():
+    task = load_task(FIXTURE)
+    with workspace(task) as work_dir:
+        registry, run_tests = _build(work_dir, task)
+        llm = FakeLLMClient(
+            [assistant_tool_call("run_tests", {}, call_id=f"c{i}") for i in range(6)]
+        )
+
+        result = run_agent(task, work_dir, llm, registry, run_tests)
+
+    assert result.steps_used == 4, "one real call plus MAX_GUARD_HITS repeats, then abandon"
+    assert result.solved is False
+
+
+def test_the_guarded_call_is_recorded_in_the_trace():
+    task = load_task(FIXTURE)
+    with workspace(task) as work_dir:
+        registry, run_tests = _build(work_dir, task)
+        llm = FakeLLMClient(
+            [
+                assistant_tool_call("list_files", {}, call_id="c1"),
+                assistant_tool_call("list_files", {}, call_id="c2"),
+            ]
+        )
+        tracer = Tracer()
+
+        run_agent(task, work_dir, llm, registry, run_tests, max_steps=2, tracer=tracer)
+
+    assert [event.kind for event in tracer.events] == ["llm", "tool", "llm", "tool"]
+    assert "guarded" in tracer.events[-1].detail
+
+
+def test_peak_prompt_tokens_is_the_largest_single_prompt():
+    task = load_task(FIXTURE)
+    with workspace(task) as work_dir:
+        registry, run_tests = _build(work_dir, task)
+        llm = FakeLLMClient(
+            [
+                assistant_tool_call("list_files", {}, call_id="c1", prompt_tokens=120),
+                assistant_text("ok", prompt_tokens=90),
+            ]
+        )
+
+        result = run_agent(task, work_dir, llm, registry, run_tests, max_steps=2)
+
+    assert result.peak_prompt_tokens == 120
+    assert result.prompt_tokens == 210
 
 
 def test_history_is_append_only_and_carries_tool_call_ids():
@@ -83,7 +158,7 @@ def test_history_is_append_only_and_carries_tool_call_ids():
         llm = FakeLLMClient(
             [assistant_tool_call("run_tests", {}, call_id="c1"), assistant_text("giving up")]
         )
-        run_agent(task, work_dir, llm, registry, run_tests)
+        run_agent(task, work_dir, llm, registry, run_tests, max_steps=2)
 
     first_history, second_history = llm.calls
     assert second_history[: len(first_history)] == first_history
@@ -122,7 +197,7 @@ def test_repeated_identical_call_is_guarded_instead_of_re_executed():
         )
         tracer = Tracer()
 
-        run_agent(task, work_dir, llm, registry, run_tests, tracer=tracer)
+        run_agent(task, work_dir, llm, registry, run_tests, max_steps=3, tracer=tracer)
 
     third_history = llm.calls[2]
     assert "already called" in third_history[-1]["content"]
@@ -137,7 +212,7 @@ def test_trace_records_every_llm_and_tool_event():
         )
         tracer = Tracer()
 
-        result = run_agent(task, work_dir, llm, registry, run_tests, tracer=tracer)
+        result = run_agent(task, work_dir, llm, registry, run_tests, max_steps=2, tracer=tracer)
 
     kinds = [event.kind for event in tracer.events]
     assert kinds == ["llm", "tool", "llm"]

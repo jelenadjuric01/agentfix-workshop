@@ -93,8 +93,14 @@ NOT SOLVED  03-parser  steps=6/10  tokens=6821  13.19s
 
 The model correctly diagnosed both bugs in prose — and then never called `write_file`. The loop
 ended because no further tool call came, leaving 4 steps of budget unused and the fixture still
-broken. Teaching point: a text-only "I know what's wrong" is not a fix, and nothing in the loop
-forces the model to act on its own diagnosis.
+broken. Teaching point: a text-only "I know what's wrong" is not a fix.
+
+**Also a pre-fix recording.** At the time, *any* text-only reply ended the run — `is_done` decided
+only the reported `solved` flag, so the loop's stop condition was decorative. It no longer is: a
+text-only reply while the tests are red now gets one appended nudge ("The tests have not passed.
+Read the latest failure and write a fix.") and the loop spends another step. Use this trace to make
+the point concrete — the fix for "the agent gave up with budget to spare" was four lines in the
+loop, not a better model.
 
 ### 3. Burning the whole budget re-verifying without ever editing again
 
@@ -110,12 +116,19 @@ NOT SOLVED  03-parser  steps=10/10  tokens=17669  34.27s
 ```
 
 After confirming the failure at step 6, the model called `run_tests` four more times in a row
-without ever attempting a second `write_file`. Teaching point — and this is the loop-guard
-limitation to name explicitly: the loop guard blocks **re-executing an identical consecutive
-call** (same tool, same arguments, twice in a row), but it does not break out of a *cycle*. Each
-`run_tests` call here had no arguments, so the guard fired and injected an "already called"
-observation each time — the model just kept calling it anyway, spending its whole remaining
-budget collecting those observations instead of trying something different.
+without ever attempting a second `write_file`. Each call had no arguments, so the guard fired and
+injected an "already called" observation each time — and the model kept calling it anyway.
+
+**This is a pre-fix recording, and it is what the loop guard was changed for.** The guard used to
+inject the same observation indefinitely, so a stuck model could spend its whole budget collecting
+them. It now counts *consecutive* hits, escalates the wording on the second, and abandons the run
+at `MAX_GUARD_HITS = 3` — the same behaviour today would end at step 9, and each guarded call now
+records a trace event instead of leaving a silent gap under `--verbose`. Show the trace, then say
+what changed and why: an agent that cannot make progress should stop, not spend the remaining
+budget proving it.
+
+What the guard still does not do is break a longer *cycle*: `run_tests → list_files → run_tests`
+never trips it, because no two consecutive signatures match.
 
 Say this plainly to students: agents have budgets, and a stuck model can spend its entire budget
 without making progress. That is not a bug in this codebase; it is what a hard step cap is *for* —

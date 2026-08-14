@@ -17,6 +17,7 @@ def run_agent(task, work_dir, llm, registry, run_tests, max_steps=MAX_STEPS, tra
     # ^ the only two messages that exist before the model has done anything.
 
     previous_signature = None
+    guard_hits = 0
     for step in range(1, max_steps + 1):
         # ^ bounded by construction: an agent with no cap is an unbounded wait and bill.
         # Raised to 10 from an original 6 after measurement — this tool granularity needs
@@ -32,29 +33,43 @@ def run_agent(task, work_dir, llm, registry, run_tests, max_steps=MAX_STEPS, tra
                 signature = _call_signature(call)
                 if signature == previous_signature:
                     # ^ loop guard: same tool + same args twice in a row gets an observation
-                    # instead of a re-execution. See "Loop guard limitation" below — it does
-                    # not stop here, it `continue`s to the next call.
+                    # instead of a re-execution, with wording that escalates on the second
+                    # repeat. See "Loop guard" below.
+                    guard_hits += 1
                     messages.append({...})
+                    tracer.record(TraceEvent(..., detail="guarded — ..."))
                     continue
+                guard_hits = 0
                 previous_signature = signature
                 messages.append(registry.dispatch(call).as_message())
                 # ^ the only two methods that bridge model output to real effects:
                 # `schemas()` above, `dispatch()` here.
+
+            if guard_hits >= MAX_GUARD_HITS:
+                break
+                # ^ three identical calls in a row is a stuck model, not slow progress.
             continue
             # ^ tool calls never end the run on their own — always loop back for another turn.
 
         if is_done(run_tests):
             # ^ verification by execution, not by the model's say-so. The highest-value idea
             # in the whole design. `run_tests` is asked, not told: nothing hands the agent the
-            # failing test output up front (see "Discovery over pre-loading" below).
+            # failing test output up front.
             break
-        break
-        # ^ NOTE: in the shipped stub this second `break` exists because `is_done` always
-        # returns False before Stage 3 is implemented, so the loop must still terminate on a
-        # text-only reply rather than raising. Stage 3's fix targets `is_done`, not this line.
+
+        messages.append({"role": "user", "content": NUDGE})
+        # ^ the model replied with prose and the tests are still red. That is not a stop
+        # condition — it may have given up, or claimed a fix it never verified. So the loop
+        # appends one plain nudge ("The tests have not passed. Read the latest failure and
+        # write a fix.") and spends another step. Only `is_done` and `max_steps` end a run.
 
     return AgentResult(...)
 ```
+
+`is_done` is therefore load-bearing: it is the *only* thing that can end a run early. Before
+Stage 3 is implemented it returns `False`, so on a fresh `main` clone the agent runs its full
+step budget and reports `NOT SOLVED` — which is the honest behaviour for an agent whose stop
+condition has not been written yet.
 
 ## Module map
 
@@ -171,16 +186,24 @@ simply mean no run has yet needed enough context for a 4096-token ceiling to mat
 documented in `README.md`, and is the thing to check first if a long run behaves as though it lost
 track of early tool calls.
 
-## Loop-guard limitation
+## Loop guard
 
 The guard compares only the *immediately previous* call's signature (tool name + sorted argument
-items). It blocks one exact repeat, but it does not detect or break a longer cycle: a model that
-calls `run_tests` four times in a row still trips the guard on calls 2, 3, and 4 individually, gets
-an "already called" observation each time, and can keep doing this until the step budget runs out
-without ever trying something different. See `WORKSHOP.md`'s failure-mode traces for a measured
-example of exactly this happening. The guard is honestly a workaround for small-model capability
-("don't waste a whole turn re-reading the same file"), not an architectural cycle-detector — say so
-if a student asks why it didn't save that run.
+items) and blocks one exact repeat with an observation instead of a re-execution. Originally that
+was all it did, and it was not enough: a model calling `run_tests` five times in a row tripped the
+guard on each repeat, collected an "already called" observation each time, and burned its whole
+budget without trying anything different (measured — see `WORKSHOP.md`'s failure-mode trace 3).
+
+So the guard now counts *consecutive* hits. The first hit gets the plain "you already called this"
+observation; later hits get escalated wording naming what to do instead; at `MAX_GUARD_HITS = 3`
+the run is abandoned. Guarded calls also record a trace event — without one, `--verbose` showed an
+`llm` event calling a tool with no matching `tool` line underneath, which is confusing in exactly
+the run a student is trying to read.
+
+What the guard still is *not*: a cycle detector. `run_tests → list_files → run_tests → list_files`
+never trips it, because no two consecutive signatures match. It remains a workaround for
+small-model capability ("don't waste a turn re-reading the same file") with a bounded escape
+hatch, not an architectural solution — say so if a student asks.
 
 ## What was deliberately left out
 
