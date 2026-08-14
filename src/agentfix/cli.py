@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from agentfix import __version__
+from agentfix.agent.loop import MAX_STEPS
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,7 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
     solve = sub.add_parser("solve", help="run the agent on one task")
     solve.add_argument("task_dir", type=Path)
     solve.add_argument("--verbose", action="store_true", help="print the agent's trace")
-    solve.add_argument("--max-steps", type=int, default=6)
+    solve.add_argument("--max-steps", type=int, default=MAX_STEPS)
 
     evaluate = sub.add_parser("eval", help="run the agent over a suite of tasks")
     evaluate.add_argument("--suite", default="workshop", choices=["workshop", "humanevalfix"])

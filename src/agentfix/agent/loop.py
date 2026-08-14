@@ -10,7 +10,7 @@ from agentfix.tasks.loader import Task
 from agentfix.tools.base import ToolRegistry
 from agentfix.tools.tests_tool import RunTestsTool
 
-MAX_STEPS = 6
+MAX_STEPS = 10
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,8 @@ def system_prompt(registry: ToolRegistry) -> str:
         f"You have these tools: {names}.\n"
         "Work in this order: run the tests to see what fails, read the relevant file(s) "
         "before editing, then write the corrected file.\n"
+        "Only read files the failure actually implicates — do not read every file "
+        "list_files returns.\n"
         "When you call write_file you must supply the COMPLETE file contents, not a diff.\n"
         "Then run the tests again to confirm the fix worked — you are not finished until "
         "they pass. If they still fail, read the new failure and try again.\n"
