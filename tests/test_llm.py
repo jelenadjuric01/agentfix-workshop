@@ -1,9 +1,9 @@
 import pytest
 
-from agentfix.config import LLMConfig
+from agentfix.config import BASE_MODEL, LLMConfig
 from agentfix.llm.client import OllamaClient
 from agentfix.llm.fake import FakeLLMClient, assistant_text, assistant_tool_call
-from agentfix.llm.types import ToolCall
+from agentfix.llm.types import INVALID_ARGUMENTS, ToolCall
 
 
 class _StubFunction:
@@ -56,7 +56,8 @@ def _make_stub_create(response: _StubResponse, captured_kwargs: dict):
 def test_config_defaults_match_spec():
     config = LLMConfig()
     assert config.base_url == "http://localhost:11434/v1"
-    assert config.model == "hf.co/JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q4_K_M"
+    assert config.model == "agentfix-mellum2"
+    assert BASE_MODEL == "hf.co/JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q4_K_M"
     assert config.temperature == 0.6
     assert config.top_p == 0.95
     assert config.max_tokens == 1024
@@ -172,10 +173,14 @@ def test_ollama_client_handles_missing_usage():
     assert reply.completion_tokens == 0
 
 
-def test_ollama_client_treats_malformed_tool_call_arguments_as_empty_dict():
+MALFORMED = "{not json"
+NOT_AN_OBJECT = "[1, 2, 3]"
+
+
+def test_ollama_client_marks_malformed_tool_call_arguments():
     message = _StubMessage(
         content="",
-        tool_calls=[_StubToolCall("call_1", "run_tests", "{not json")],
+        tool_calls=[_StubToolCall("call_1", "run_tests", MALFORMED)],
         dump={"role": "assistant", "content": ""},
     )
     response = _StubResponse(message, usage=_StubUsage(1, 1))
@@ -185,13 +190,13 @@ def test_ollama_client_treats_malformed_tool_call_arguments_as_empty_dict():
 
     reply = client.chat([{"role": "user", "content": "go"}])
 
-    assert reply.tool_calls[0].arguments == {}
+    assert reply.tool_calls[0].arguments == {INVALID_ARGUMENTS: MALFORMED}
 
 
-def test_ollama_client_treats_non_object_tool_call_arguments_as_empty_dict():
+def test_ollama_client_marks_non_object_tool_call_arguments():
     message = _StubMessage(
         content="",
-        tool_calls=[_StubToolCall("call_1", "run_tests", "[1, 2, 3]")],
+        tool_calls=[_StubToolCall("call_1", "run_tests", NOT_AN_OBJECT)],
         dump={"role": "assistant", "content": ""},
     )
     response = _StubResponse(message, usage=_StubUsage(1, 1))
@@ -201,7 +206,7 @@ def test_ollama_client_treats_non_object_tool_call_arguments_as_empty_dict():
 
     reply = client.chat([{"role": "user", "content": "go"}])
 
-    assert reply.tool_calls[0].arguments == {}
+    assert reply.tool_calls[0].arguments == {INVALID_ARGUMENTS: NOT_AN_OBJECT}
 
 
 @pytest.mark.llm

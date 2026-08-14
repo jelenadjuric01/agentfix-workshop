@@ -21,12 +21,18 @@ def subtotal(prices: list[float]) -> float:
 def total_with_tax(prices: list[float]) -> float:
     return with_tax(subtotal(prices))
 """
+BROKEN_CART = FIXED_CART.replace("return sum(prices)", "return sum(prices) - 1")
 
 
 def _build(work_dir, task):
     run_tests = RunTestsTool(work_dir, task.test_command, SubprocessBackend(), timeout_s=30)
     registry = ToolRegistry(
-        [ListFilesTool(work_dir), ReadFileTool(work_dir), WriteFileTool(work_dir), run_tests]
+        [
+            ListFilesTool(work_dir),
+            ReadFileTool(work_dir),
+            WriteFileTool(work_dir, on_write=run_tests.invalidate),
+            run_tests,
+        ]
     )
     return registry, run_tests
 
@@ -74,6 +80,53 @@ def test_agent_is_not_solved_when_the_model_merely_claims_success():
         result = run_agent(task, work_dir, llm, registry, run_tests, max_steps=2)
 
     assert result.solved is False
+
+
+def test_a_pass_followed_by_a_breaking_write_is_not_solved():
+    """`is_done` must not trust a green run that a later write invalidated."""
+    task = load_task(FIXTURE)
+    with workspace(task) as work_dir:
+        registry, run_tests = _build(work_dir, task)
+        llm = FakeLLMClient(
+            [
+                assistant_tool_call(
+                    "write_file", {"path": "shopcart/cart.py", "content": FIXED_CART}, call_id="c1"
+                ),
+                assistant_tool_call("run_tests", {}, call_id="c2"),
+                assistant_tool_call(
+                    "write_file", {"path": "shopcart/cart.py", "content": BROKEN_CART}, call_id="c3"
+                ),
+                assistant_text("all done"),
+            ]
+        )
+
+        result = run_agent(task, work_dir, llm, registry, run_tests, max_steps=4)
+
+    assert result.solved is False
+
+
+def test_the_agent_cannot_pass_by_rewriting_the_tests():
+    """`run_tests` is the only oracle, so deleting the specification must not count as a fix."""
+    task = load_task(FIXTURE)
+    with workspace(task) as work_dir:
+        registry, run_tests = _build(work_dir, task)
+        llm = FakeLLMClient(
+            [
+                assistant_tool_call(
+                    "write_file",
+                    {"path": "tests/test_cart.py", "content": "def test_ok():\n    assert True\n"},
+                    call_id="c1",
+                ),
+                assistant_tool_call("run_tests", {}, call_id="c2"),
+                assistant_text("done"),
+            ]
+        )
+
+        result = run_agent(task, work_dir, llm, registry, run_tests, max_steps=3)
+
+    assert result.solved is False
+    refusal = llm.calls[1][-1]["content"]
+    assert "tests are the specification" in refusal.lower()
 
 
 def test_a_text_only_reply_does_not_end_the_run_while_the_tests_still_fail():

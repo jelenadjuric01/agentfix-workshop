@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from agentfix.llm.types import ToolCall
+from agentfix.llm.types import INVALID_ARGUMENTS, ToolCall
 
 MAX_TOOL_OUTPUT_CHARS = 2000
 MAX_FILE_READ_CHARS = 4000
@@ -74,6 +74,17 @@ class ToolRegistry:
                 call.id,
                 call.name,
                 ToolResult(False, f"No such tool: {call.name}. Available tools: {available}"),
+            )
+
+        if INVALID_ARGUMENTS in call.arguments:
+            return ToolOutcome(
+                call.id,
+                call.name,
+                ToolResult(
+                    False,
+                    f"Your arguments for {call.name} were not valid JSON, so nothing ran. "
+                    "Send the call again with a single well-formed JSON object.",
+                ),
             )
 
         missing = [key for key in tool.parameters.get("required", []) if key not in call.arguments]

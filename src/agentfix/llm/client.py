@@ -5,7 +5,7 @@ import json
 from openai import OpenAI
 
 from agentfix.config import LLMConfig
-from agentfix.llm.types import LLMReply, ToolCall
+from agentfix.llm.types import INVALID_ARGUMENTS, LLMReply, ToolCall
 
 
 class OllamaClient:
@@ -22,6 +22,9 @@ class OllamaClient:
             "temperature": self.config.temperature,
             "top_p": self.config.top_p,
             "max_tokens": self.config.max_tokens,
+            # Ollama's /v1 endpoint DROPS this (measured: `ollama ps` still says 4096).
+            # It is kept because vLLM and Ollama's native /api/chat both honour it; on
+            # Ollama the context comes from the derived model instead — see Modelfile.
             "extra_body": {"options": {"num_ctx": self.config.num_ctx}},
         }
         if tools:
@@ -55,5 +58,5 @@ def _parse_arguments(raw: str | None) -> dict:
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError:
-        return {}
-    return parsed if isinstance(parsed, dict) else {}
+        return {INVALID_ARGUMENTS: raw}
+    return parsed if isinstance(parsed, dict) else {INVALID_ARGUMENTS: raw}

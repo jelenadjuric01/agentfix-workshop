@@ -16,7 +16,12 @@ FIXTURE = Path("tasks/workshop/01-shopcart")
 def _build(work_dir, task):
     run_tests = RunTestsTool(work_dir, task.test_command, SubprocessBackend(), timeout_s=30)
     registry = ToolRegistry(
-        [ListFilesTool(work_dir), ReadFileTool(work_dir), WriteFileTool(work_dir), run_tests]
+        [
+            ListFilesTool(work_dir),
+            ReadFileTool(work_dir),
+            WriteFileTool(work_dir, on_write=run_tests.invalidate),
+            run_tests,
+        ]
     )
     return registry, run_tests
 

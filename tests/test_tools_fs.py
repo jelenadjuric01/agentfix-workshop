@@ -88,3 +88,30 @@ def test_write_file_outside_root_is_refused(repo):
     result = WriteFileTool(repo).run(path="../evil.py", content="x = 1\n")
     assert result.ok is False
     assert "outside" in result.content.lower()
+
+
+@pytest.mark.parametrize("protected", ["tests/test_calc.py", "test_calc.py", "tests/conftest.py"])
+def test_write_file_refuses_to_touch_the_test_suite(repo, protected):
+    result = WriteFileTool(repo).run(path=protected, content="def test_ok():\n    assert True\n")
+    assert result.ok is False
+    assert "tests are the specification" in result.content.lower()
+    assert (repo / "tests" / "test_calc.py").read_text(encoding="utf-8") == (
+        "def test_add():\n    pass\n"
+    )
+
+
+def test_a_successful_write_notifies_its_observer(repo):
+    notified = []
+    result = WriteFileTool(repo, on_write=lambda: notified.append(True)).run(
+        path="src/calc.py", content="def add(a, b):\n    return a + b\n"
+    )
+    assert result.ok is True
+    assert notified == [True]
+
+
+def test_a_refused_write_does_not_notify(repo):
+    notified = []
+    tool = WriteFileTool(repo, on_write=lambda: notified.append(True))
+    tool.run(path="src/calc.py", content="def add(a, b)\n")
+    tool.run(path="tests/test_calc.py", content="x = 1\n")
+    assert notified == []

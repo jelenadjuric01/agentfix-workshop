@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+# Key under which an unparseable tool-call argument string is carried through to
+# `ToolRegistry.dispatch`, so the model is told its JSON was malformed rather than
+# that some argument it thought it sent was missing.
+INVALID_ARGUMENTS = "__agentfix_invalid_json__"
+
 
 @dataclass(frozen=True)
 class ToolCall:

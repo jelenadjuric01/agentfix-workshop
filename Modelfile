@@ -1,0 +1,21 @@
+# The agent's context window has to be set on the SERVER, not the request.
+#
+# Ollama's OpenAI-compatible /v1 endpoint silently drops the `options` block, so
+# `extra_body={"options": {"num_ctx": 16384}}` in llm/client.py has no effect there
+# (measured: `ollama ps` still reports CONTEXT 4096). Exporting OLLAMA_CONTEXT_LENGTH
+# in your own shell does nothing either — it has to be in the server process's
+# environment, which on macOS means launchctl and a restart.
+#
+# Deriving the model with the parameter baked in avoids all of that: it is one
+# command, identical on every platform, and it survives whichever endpoint the
+# client happens to use.
+#
+#   ollama pull hf.co/JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q4_K_M
+#   ollama create agentfix-mellum2 -f Modelfile
+#
+# Verify with `ollama ps` after one request: the CONTEXT column must read 16384.
+# `agentfix doctor` checks this for you.
+
+FROM hf.co/JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q4_K_M
+
+PARAMETER num_ctx 16384

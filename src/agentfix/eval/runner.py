@@ -6,11 +6,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from agentfix.agent.loop import MAX_STEPS, AgentResult
+from agentfix.config import REPO_ROOT
 from agentfix.eval.humanevalfix import load_vendored_rows, write_task_dir
 from agentfix.llm.types import LLMClient
 from agentfix.runner import solve_task
 
-RESULTS_DIR = Path("results")
+RESULTS_DIR = REPO_ROOT / "results"
+WORKSHOP_TASKS_DIR = REPO_ROOT / "tasks" / "workshop"
 
 
 @dataclass(frozen=True)
@@ -28,19 +30,31 @@ class EvalReport:
         return {
             "suite": self.suite,
             "pass_at_1": self.pass_at_1,
+            "peak_prompt_tokens": self.peak_prompt_tokens,
             "results": [
                 {k: v for k, v in asdict(result).items() if k != "trace"} for result in self.results
             ],
         }
 
+    @property
+    def peak_prompt_tokens(self) -> int:
+        """Largest single prompt across the whole suite — compare it to the context window."""
+        return max((result.peak_prompt_tokens for result in self.results), default=0)
+
     def format_table(self) -> str:
-        header = f"{'task':<24} {'solved':<8} {'steps':<7} {'tokens':<9} {'seconds':<8}"
+        header = (
+            f"{'task':<24} {'solved':<8} {'steps':<7} {'tokens':<9} {'peak ctx':<10} {'seconds':<8}"
+        )
         rows = [
             f"{r.task_id:<24} {str(r.solved):<8} {r.steps_used:<7} "
-            f"{r.prompt_tokens + r.completion_tokens:<9} {r.duration_s:<8}"
+            f"{r.prompt_tokens + r.completion_tokens:<9} {r.peak_prompt_tokens:<10} "
+            f"{r.duration_s:<8}"
             for r in self.results
         ]
-        summary = f"\npass@1 = {self.pass_at_1:.2f}  ({len(self.results)} task(s))"
+        summary = (
+            f"\npass@1 = {self.pass_at_1:.2f}  ({len(self.results)} task(s))"
+            f"  peak prompt = {self.peak_prompt_tokens} tok"
+        )
         return "\n".join([header, "-" * len(header), *rows]) + summary
 
 
@@ -51,17 +65,17 @@ def evaluate(
     return EvalReport(suite="custom", results=tuple(results))
 
 
-def run_suite(suite: str, limit: int = 3) -> int:
+def run_suite(suite: str, limit: int = 3, llm: LLMClient | None = None) -> int:
     if suite == "workshop":
-        task_dirs = sorted(p.parent for p in Path("tasks/workshop").glob("*/task.json"))[:limit]
-        report = EvalReport("workshop", evaluate(task_dirs).results)
+        task_dirs = sorted(p.parent for p in WORKSHOP_TASKS_DIR.glob("*/task.json"))[:limit]
+        report = EvalReport("workshop", evaluate(task_dirs, llm=llm).results)
         _publish(report)
         return 0
 
     with tempfile.TemporaryDirectory() as temp:
         rows = load_vendored_rows()[:limit]
         task_dirs = [write_task_dir(row, Path(temp)) for row in rows]
-        report = EvalReport("humanevalfix", evaluate(task_dirs).results)
+        report = EvalReport("humanevalfix", evaluate(task_dirs, llm=llm).results)
 
     _publish(report)
     return 0

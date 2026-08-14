@@ -1,14 +1,34 @@
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 
-from agentfix.config import LLMConfig
+from agentfix.config import BASE_MODEL, MIN_CONTEXT_LENGTH, LLMConfig
 
-PULL_HINT = "run: ollama pull hf.co/JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q4_K_M"
+PULL_HINT = f"run: ollama pull {BASE_MODEL}"
+CREATE_HINT = "run: ollama create agentfix-mellum2 -f Modelfile"
+SERVE_HINT = (
+    "the Ollama server is not answering — start it "
+    "(macOS: open the Ollama app; otherwise: ollama serve)"
+)
+
+MIN_TOTAL_RAM_BYTES = 16 * 1024**3
+COMFORTABLE_FREE_RAM_BYTES = 9 * 1024**3
+
+_CAPTURE = {"capture_output": True, "text": True, "check": True}
+
+# One short call measures cold model load and prefill, not generation. So warm up first,
+# throw that call away, then time a prompt long enough that per-call overhead stops
+# dominating the arithmetic.
+WARMUP_PROMPT = "Reply with: ok"
+THROUGHPUT_PROMPT = "Count from 1 to 120, one number per line, digits only."
 
 
 @dataclass(frozen=True)
@@ -18,10 +38,69 @@ class Check:
     detail: str
 
 
+def _get_json(url: str, timeout_s: float = 5.0) -> dict | None:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout_s) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+
+
 def _check_python() -> Check:
     version = sys.version_info
     ok = (version.major, version.minor) >= (3, 12)
     return Check("python", ok, f"{sys.version.split()[0]}" + ("" if ok else " — need >= 3.12"))
+
+
+def _memory_bytes() -> tuple[int | None, int | None]:
+    """(total, free). Either may be None on a platform we cannot read."""
+    if sys.platform.startswith("linux"):
+        try:
+            fields = dict(
+                (line.split(":", 1)[0], int(line.split()[1]) * 1024)
+                for line in Path("/proc/meminfo").read_text(encoding="utf-8").splitlines()
+                if ":" in line and line.split()[1].isdigit()
+            )
+        except OSError:
+            return None, None
+        return fields.get("MemTotal"), fields.get("MemAvailable")
+
+    if sys.platform == "darwin":
+        try:
+            total = int(subprocess.run(["sysctl", "-n", "hw.memsize"], **_CAPTURE).stdout)
+            page = int(subprocess.run(["sysctl", "-n", "hw.pagesize"], **_CAPTURE).stdout)
+            counts = {
+                line.split(":")[0].strip(): int(line.split(":")[1].strip().rstrip("."))
+                for line in subprocess.run(["vm_stat"], **_CAPTURE).stdout.splitlines()
+                if ":" in line and line.split(":")[1].strip().rstrip(".").isdigit()
+            }
+        except (OSError, ValueError):
+            return None, None
+        reclaimable = ("Pages free", "Pages inactive", "Pages speculative", "Pages purgeable")
+        return total, sum(counts.get(key, 0) for key in reclaimable) * page
+
+    return None, None
+
+
+def _check_ram() -> Check:
+    total, free = _memory_bytes()
+    if total is None:
+        return Check("ram", True, "could not read memory on this platform — check by hand")
+
+    detail = f"{total / 1024**3:.1f} GB total"
+    if free is not None:
+        detail += f", {free / 1024**3:.1f} GB free"
+
+    if total < MIN_TOTAL_RAM_BYTES:
+        return Check(
+            "ram",
+            False,
+            f"{detail} — under 16 GB, use tier 2 (Kaggle) or tier 3 (qwen2.5-coder:1.5b); "
+            "see README.md",
+        )
+    if free is not None and free < COMFORTABLE_FREE_RAM_BYTES:
+        detail += " — tight for an 8 GB model unless it is already loaded; close other apps"
+    return Check("ram", True, detail)
 
 
 def _check_ollama_installed() -> Check:
@@ -31,31 +110,84 @@ def _check_ollama_installed() -> Check:
     )
 
 
+def _check_server(config: LLMConfig) -> Check:
+    payload = _get_json(f"{config.native_api_url}/api/tags")
+    if payload is None:
+        return Check("ollama server", False, SERVE_HINT)
+    return Check("ollama server", True, f"reachable at {config.native_api_url}")
+
+
 def _check_model_present(config: LLMConfig) -> Check:
-    if shutil.which("ollama") is None:
-        return Check("model present", False, f"cannot check — {PULL_HINT}")
-    listing = subprocess.run(["ollama", "list"], capture_output=True, text=True)
-    short = config.model.split("/")[-1].lower()
-    ok = short in listing.stdout.lower()
-    return Check("model present", ok, config.model if ok else f"missing — {PULL_HINT}")
+    payload = _get_json(f"{config.native_api_url}/api/tags") or {}
+    names = [model.get("name", "") for model in payload.get("models", [])]
+    if any(name.split(":")[0] == config.model for name in names):
+        return Check("model present", True, config.model)
+
+    if any(name.split(":")[0] == BASE_MODEL for name in names):
+        return Check(
+            "model present", False, f"{BASE_MODEL} is pulled but not derived — {CREATE_HINT}"
+        )
+    return Check(
+        "model present", False, f"{config.model} missing — {PULL_HINT}, then {CREATE_HINT}"
+    )
 
 
 def _check_generation(config: LLMConfig) -> Check:
     from agentfix.llm.client import OllamaClient
 
+    client = OllamaClient(config)
     try:
-        started = time.time()
-        reply = OllamaClient(config).chat([{"role": "user", "content": "Reply with: ok"}])
-        elapsed = max(time.time() - started, 1e-6)
-        rate = reply.completion_tokens / elapsed
-        return Check("generation", True, f"{rate:.0f} tok/s")
+        client.chat([{"role": "user", "content": WARMUP_PROMPT}])
     except Exception as error:
         return Check("generation", False, f"{type(error).__name__}: {error}")
+
+    try:
+        started = time.time()
+        reply = client.chat([{"role": "user", "content": THROUGHPUT_PROMPT}])
+        elapsed = max(time.time() - started, 1e-6)
+    except Exception as error:
+        return Check("generation", False, f"{type(error).__name__}: {error}")
+
+    rate = reply.completion_tokens / elapsed
+    return Check(
+        "generation",
+        True,
+        f"{rate:.0f} tok/s ({reply.completion_tokens} tokens in {elapsed:.1f}s)",
+    )
+
+
+def _check_context(config: LLMConfig) -> Check:
+    """The single most consequential setting, and the one nothing else will tell you about."""
+    payload = _get_json(f"{config.native_api_url}/api/ps")
+    if payload is None:
+        return Check("context window", False, f"cannot read /api/ps — {SERVE_HINT}")
+
+    loaded = [
+        model
+        for model in payload.get("models", [])
+        if model.get("name", "").split(":")[0] == config.model
+    ]
+    if not loaded:
+        return Check(
+            "context window",
+            False,
+            f"{config.model} is not loaded, so its context cannot be read — "
+            "run this check again after a generation succeeds",
+        )
+
+    length = loaded[0].get("context_length") or 0
+    if length < MIN_CONTEXT_LENGTH:
+        return Check(
+            "context window",
+            False,
+            f"{length} tokens — too small; the agent's history will be silently truncated "
+            f"mid-run. {CREATE_HINT}",
+        )
+    return Check("context window", True, f"{length} tokens")
 
 
 def _check_sandbox() -> Check:
     import tempfile
-    from pathlib import Path
 
     from agentfix.sandbox.base import get_backend
 
@@ -67,9 +199,14 @@ def _check_sandbox() -> Check:
 
 def run_checks() -> list[Check]:
     config = LLMConfig.from_env()
-    checks = [_check_python(), _check_ollama_installed(), _check_model_present(config)]
+    checks = [_check_python(), _check_ram(), _check_ollama_installed(), _check_server(config)]
+
     if checks[-1].ok:
-        checks.append(_check_generation(config))
+        checks.append(_check_model_present(config))
+        if checks[-1].ok:
+            checks.append(_check_generation(config))
+            checks.append(_check_context(config))
+
     checks.append(_check_sandbox())
     return checks
 

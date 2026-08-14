@@ -1,4 +1,4 @@
-from agentfix.llm.types import ToolCall
+from agentfix.llm.types import INVALID_ARGUMENTS, ToolCall
 from agentfix.tools.base import ToolRegistry, ToolResult, truncate
 
 
@@ -88,3 +88,15 @@ def test_tool_exception_becomes_an_observation():
     outcome = ToolRegistry([BoomTool()]).dispatch(ToolCall(id="c1", name="boom", arguments={}))
     assert outcome.result.ok is False
     assert "kaboom" in outcome.result.content
+
+
+def test_malformed_json_arguments_say_so_instead_of_naming_a_missing_argument():
+    """ "Missing required argument(s): message" is a misleading thing to self-correct from."""
+    registry = ToolRegistry([EchoTool()])
+    outcome = registry.dispatch(
+        ToolCall(id="c1", name="echo", arguments={INVALID_ARGUMENTS: '{"message": '})
+    )
+
+    assert outcome.result.ok is False
+    assert "not valid JSON" in outcome.result.content
+    assert "Missing required" not in outcome.result.content

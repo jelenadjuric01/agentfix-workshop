@@ -31,7 +31,8 @@ def solve_task(
             [
                 ListFilesTool(work_dir),
                 ReadFileTool(work_dir),
-                WriteFileTool(work_dir),
+                # a write makes the last test result stale, so `is_done` must not trust it
+                WriteFileTool(work_dir, on_write=run_tests.invalidate),
                 run_tests,
             ]
         )

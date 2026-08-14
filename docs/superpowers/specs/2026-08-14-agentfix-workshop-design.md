@@ -77,7 +77,7 @@ src/agentfix/
   eval/humanevalfix.py   # copied from predecessor; behind [eval] extra
   doctor.py              # preflight
   cli.py                 # agentfix doctor | solve | eval
-tasks/workshop/          # 3 hand-built multi-file buggy repos (01-shopcart, 02-invoice, 03-parser)
+tasks/workshop/          # 3 hand-built buggy repos (01-shopcart, 02-invoice, 03-parser)
 tasks/humanevalfix/      # vendored 20-task JSON subset
 exercises/stage_{1,2,3}/ # TODOs + failing tests
 notebooks/kaggle.ipynb   # tier 2
@@ -250,7 +250,7 @@ tasks/
   workshop/
     01-shopcart/     # obvious bug; failing test names the module
     02-invoice/      # bug is NOT in the file the failing test points at
-    03-parser/       # two files involved
+    03-parser/       # two defects, co-located in tokens.py (see R16)
   humanevalfix/      # vendored 20-task JSON subset
 ```
 
@@ -319,9 +319,10 @@ uv run agentfix eval --suite workshop
 uv run pytest exercises/stage_1
 ```
 
-`agentfix doctor` is the pre-work artifact: checks Python version, Ollama reachability, model
-presence, free RAM, one real generation, and one sandbox execution — then prints
-`✅ READY — 51 tok/s` or a specific remedy per failure with the exact command to run. Students send
+`agentfix doctor` is the pre-work artifact: checks Python version, RAM (total, with free
+reported), Ollama installation, server reachability, derived-model presence, the loaded context
+window, one warmed-up timed generation, and one sandbox execution — then prints
+`READY — 51 tok/s` or a specific remedy per failure with the exact command to run. Students send
 the output days ahead, converting setup chaos into a triage list.
 
 Docs, three files: `README.md` (setup, three tiers), `WORKSHOP.md` (minute-by-minute runsheet and

@@ -14,7 +14,7 @@ PYTEST_CMD = (sys.executable, "-m", "pytest", "-q")
 def test_tool_declares_a_valid_schema():
     tool = RunTestsTool(Path("."), PYTEST_CMD, SubprocessBackend())
     assert tool.name == "run_tests"
-    assert tool.description, "the model chooses tools by their description — write one"
+    assert tool.description, "the model chooses tools by their description — keep it"
     assert tool.parameters["type"] == "object"
 
 
@@ -42,7 +42,7 @@ def test_running_passing_tests_reports_success(tmp_path):
 
 
 def test_the_model_chooses_this_tool_when_told_tests_fail():
-    """A schema the model can't understand is a schema it won't call."""
+    """A schema the model cannot understand is a schema it will not call."""
     llm = FakeLLMClient([assistant_tool_call("run_tests", {}), assistant_text("done")])
     registry = ToolRegistry([RunTestsTool(Path("."), PYTEST_CMD, SubprocessBackend())])
 

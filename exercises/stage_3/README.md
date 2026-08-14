@@ -15,3 +15,16 @@ Until you fix it, `is_done` just returns `False` — so `exercises/stage_3` fail
 `agentfix solve` will run to completion and report `NOT SOLVED` rather than raising.
 
     uv run pytest exercises/stage_3 -v
+
+## Finished early? When does your verification go stale?
+
+`is_done` reads the *last* `run_tests` result. Work out what happens on this sequence:
+
+    write_file(a correct fix) → run_tests(green) → write_file(breaks it again) → "all done"
+
+Nothing re-ran the tests after that second write, so the green result no longer describes the code
+on disk — and a naive `is_done` reports SOLVED. This repo closes it by having a successful
+`write_file` clear `run_tests.last_result` (see `on_write` in `src/agentfix/runner.py`); find that
+wiring and convince yourself it works. Then the harder question, which this repo does **not** solve:
+what stops the agent from writing `if prices == [10.0, 5.0]: return 16.5`? See `ARCHITECTURE.md`,
+"Two ways an agent passes without fixing anything".

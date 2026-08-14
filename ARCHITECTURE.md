@@ -125,6 +125,30 @@ the next turn. The natural instinct is to wrap the loop in `try/except` and trea
 fatal; the fix that actually improves reliability is feeding failures back to the model as
 information instead of killing the run over them.
 
+## Two ways an agent passes without fixing anything
+
+`run_tests` is the *only* oracle: `is_done` is `run_tests.last_result.passed` and nothing else. That
+is the workshop's central idea, and it also means every way of corrupting that one signal is a way
+to fake a fix. Both of these were reproducible in this repo:
+
+1. **Rewriting the specification.** `write_file("tests/test_cart.py", "def test_ok(): assert True")`
+   then `run_tests` → green → `solved=True`, with the original bug untouched. `write_file` had no
+   path restriction, so deleting the tests was a valid "fix". It now refuses any path under
+   `tests/` or named `test_*.py` and returns the observation *"the tests are the specification —
+   fix the source instead"*, which is a useful thing for the model to read rather than a silent
+   denial.
+2. **Trusting a stale pass.** `write_file`(correct) → `run_tests`(green) → `write_file`(breaks it)
+   → text reply ⇒ `solved=True` while the tests were red. `last_result` was never invalidated when
+   the workspace changed underneath it. A successful `WriteFileTool.run` now clears
+   `run_tests.last_result` through an `on_write` callback wired in `runner.py`, so verification is
+   evidence about the *current* workspace or it is nothing.
+
+What is still open, and worth saying out loud to students: nothing stops the agent from
+special-casing the exact inputs the tests use (`if prices == [10.0, 5.0]: return 16.5`). Every
+verification-based agent has this hole, and it is why real systems pair executed tests with held-out
+tests and human review rather than treating a green suite as proof. `exercises/stage_3`'s README
+poses the first half of this as an extension question.
+
 ## Two security boundaries — do not conflate them
 
 1. **Tool-layer path confinement.** Every filesystem tool resolves the requested path against the
@@ -173,18 +197,41 @@ its own `test_command`: `tasks/workshop/*/task.json` says `["-m", "pytest", "-q"
 `write_task_dir` generates `["-u", "test_candidate.py"]` for HumanEvalFix rows. Same `Task`
 abstraction, same agent, same tools, two different ways of finding out whether the fix worked.
 
-## Ollama context: what's confirmed and what isn't
+## Ollama's `/v1` endpoint ignores `options`, and that cost us
 
-`LLMConfig.num_ctx = 16384` is sent on every request via `extra_body={"options": {"num_ctx":
-...}}` against the OpenAI-compatible `/v1` endpoint. Observed on this machine: Ollama loaded the
-model with `-c 4096` and `--context-shift`, which are its own defaults, not clearly the value this
-client requested. **Whether `/v1` actually honours the `num_ctx` option has not been confirmed.**
-Runs so far total roughly 9k tokens *across* an entire run's turns rather than in one prompt, so
-nothing has broken in observed practice — but do not read that as proof the setting works; it may
-simply mean no run has yet needed enough context for a 4096-token ceiling to matter. Setting
-`OLLAMA_CONTEXT_LENGTH=16384` before starting the Ollama server is the belt-and-braces fix
-documented in `README.md`, and is the thing to check first if a long run behaves as though it lost
-track of early tool calls.
+Plainly: **Ollama's OpenAI-compatible `/v1/chat/completions` silently drops the `options` block.**
+`extra_body={"options": {"num_ctx": 16384}}` in `llm/client.py` therefore did nothing on Ollama,
+and the same request against the native `/api/chat` sets the context correctly. Measured on ollama
+0.32.4 by reading the `CONTEXT` column of `ollama ps` after one request:
+
+| request path | `CONTEXT` |
+|---|---|
+| `/v1` + `extra_body` options (what this client sends) | 4096 |
+| native `/api/chat` + `options.num_ctx` | 16384 |
+| `/v1`, with `OLLAMA_CONTEXT_LENGTH` exported in the *client's* shell | 4096 |
+| `/v1`, against a model derived with `PARAMETER num_ctx 16384` | **16384** |
+
+What it cost: with `n_ctx=4096` and `max_tokens=1024` reserved for the reply, the usable prompt
+window was about **3,072 tokens**, while peak single-call prompts on the longest HumanEvalFix runs
+measured **2,875–3,111**. `--context-shift` drops the *earliest* messages first — the system prompt
+that says "you are not finished until they pass." So on the longest runs the agent was plausibly
+being told less than we thought it was being told, and the "gave up without acting" failure mode
+that earlier notes attributed to model capability had a second candidate explanation the whole
+time. That is the general lesson worth naming to students: an inference setting you *sent* is not a
+setting the server *applied*, and the only way to know is to read it back.
+
+Three consequences in this repo:
+
+1. The shipped model is a **derived** one — `ollama create agentfix-mellum2 -f Modelfile` bakes
+   `num_ctx 16384` in. Endpoint-agnostic, one command, identical on every platform.
+2. `extra_body` is still sent, because vLLM and `/api/chat` honour it and it is free. It is not
+   what makes Ollama work, and the code says so in a comment so nobody re-learns this.
+3. `agentfix doctor` reads `/api/ps` and **FAILs** below 16384 with the exact remedy. An invisible
+   risk became a preflight signal on the artifact students already run.
+
+`AgentResult.peak_prompt_tokens` records the largest single prompt of a run and `EvalReport` carries
+it into the eval JSON and the summary line, so the next person does not have to reconstruct the
+number from a trace that `to_json` throws away.
 
 ## Loop guard
 

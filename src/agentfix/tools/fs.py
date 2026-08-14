@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import ast
+from collections.abc import Callable
 from pathlib import Path
 
 from agentfix.tools.base import MAX_FILE_READ_CHARS, ToolResult, truncate
 
 IGNORED_DIRS = {"__pycache__", ".git", ".venv", ".pytest_cache"}
+PROTECTED_HINT = (
+    "Refused: {path} is part of the test suite. The tests are the specification — "
+    "fix the source instead."
+)
 
 
 class PathEscapeError(Exception):
@@ -18,6 +23,15 @@ def resolve_in_root(root: Path, candidate: str) -> Path:
     if resolved != root_resolved and root_resolved not in resolved.parents:
         raise PathEscapeError(f"{candidate} resolves outside the task root")
     return resolved
+
+
+def is_test_path(root: Path, target: Path) -> bool:
+    """`run_tests` is the only oracle, so letting the agent rewrite the tests is a bypass."""
+    try:
+        relative = target.relative_to(root.resolve())
+    except ValueError:
+        return False
+    return "tests" in relative.parts or relative.name.startswith("test_")
 
 
 def _relative_files(root: Path) -> list[str]:
@@ -85,14 +99,18 @@ class WriteFileTool:
         "required": ["path", "content"],
     }
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, on_write: Callable[[], None] | None = None) -> None:
         self.root = root
+        self.on_write = on_write
 
     def run(self, path: str, content: str) -> ToolResult:
         try:
             target = resolve_in_root(self.root, path)
         except PathEscapeError:
             return ToolResult(False, f"Refused: {path} is outside the project root.")
+
+        if is_test_path(self.root, target):
+            return ToolResult(False, PROTECTED_HINT.format(path=path))
 
         try:
             ast.parse(content)
@@ -104,4 +122,6 @@ class WriteFileTool:
 
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
+        if self.on_write is not None:
+            self.on_write()
         return ToolResult(True, f"Wrote {len(content)} characters to {path}.")

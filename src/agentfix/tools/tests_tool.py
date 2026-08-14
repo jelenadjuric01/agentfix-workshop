@@ -25,6 +25,10 @@ class RunTestsTool:
         self.timeout_s = timeout_s
         self.last_result: ExecResult | None = None
 
+    def invalidate(self) -> None:
+        """The workspace changed, so the last test run is no longer evidence about it."""
+        self.last_result = None
+
     def run(self) -> ToolResult:
         # TODO(stage-1): run the tests via self.backend, store self.last_result,
         # and return a ToolResult whose content tells the model what happened.

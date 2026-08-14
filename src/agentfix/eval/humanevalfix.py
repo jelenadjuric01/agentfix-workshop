@@ -5,7 +5,9 @@ import random
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-VENDORED_SUBSET = Path("tasks/humanevalfix/subset.json")
+from agentfix.config import REPO_ROOT
+
+VENDORED_SUBSET = REPO_ROOT / "tasks" / "humanevalfix" / "subset.json"
 
 
 @dataclass(frozen=True)

@@ -54,6 +54,26 @@ def test_every_workshop_fixture_starts_red(task_dir):
     assert result.passed is False
 
 
+@pytest.mark.parametrize(
+    "task_dir",
+    ["tasks/workshop/01-shopcart", "tasks/workshop/02-invoice", "tasks/workshop/03-parser"],
+)
+def test_expected_failures_names_exactly_the_tests_that_fail(task_dir):
+    """The field used to be dead data. Now it pins which tests are red, so fixture rot shows up."""
+    from agentfix.sandbox.subprocess_backend import SubprocessBackend
+
+    task = load_task(Path(task_dir))
+    with workspace(task) as work_dir:
+        result = SubprocessBackend().run(work_dir, task.test_command, timeout_s=30)
+
+    failed = sorted(
+        line.split("::")[1].split()[0]
+        for line in result.output.splitlines()
+        if line.startswith("FAILED") and "::" in line
+    )
+    assert failed == sorted(task.expected_failures)
+
+
 def test_02_invoice_bug_is_not_in_the_file_the_test_names():
     """The pedagogical contract of fixture 02 — asserted so it cannot silently regress."""
     task = load_task(Path("tasks/workshop/02-invoice"))
