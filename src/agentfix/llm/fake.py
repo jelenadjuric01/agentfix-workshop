@@ -45,11 +45,11 @@ class FakeLLMClient:
         self.calls: list[list[dict]] = []
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None) -> LLMReply:
-        self.calls.append(list(messages))
         assert self._index < len(self._replies), (
             f"FakeLLMClient script exhausted after {self._index} call(s); "
             "the agent asked for more turns than the test scripted"
         )
+        self.calls.append(list(messages))
         reply = self._replies[self._index]
         self._index += 1
         return reply

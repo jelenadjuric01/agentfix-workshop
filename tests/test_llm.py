@@ -1,8 +1,56 @@
 import pytest
 
 from agentfix.config import LLMConfig
+from agentfix.llm.client import OllamaClient
 from agentfix.llm.fake import FakeLLMClient, assistant_text, assistant_tool_call
 from agentfix.llm.types import ToolCall
+
+
+class _StubFunction:
+    def __init__(self, name: str, arguments: str) -> None:
+        self.name = name
+        self.arguments = arguments
+
+
+class _StubToolCall:
+    def __init__(self, call_id: str, name: str, arguments: str) -> None:
+        self.id = call_id
+        self.function = _StubFunction(name, arguments)
+
+
+class _StubMessage:
+    def __init__(self, content: str | None, tool_calls: list | None, dump: dict) -> None:
+        self.content = content
+        self.tool_calls = tool_calls
+        self._dump = dump
+
+    def model_dump(self, exclude_none: bool = True) -> dict:
+        return self._dump
+
+
+class _StubChoice:
+    def __init__(self, message: _StubMessage) -> None:
+        self.message = message
+
+
+class _StubUsage:
+    def __init__(self, prompt_tokens: int, completion_tokens: int) -> None:
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
+
+
+class _StubResponse:
+    def __init__(self, message: _StubMessage, usage: _StubUsage | None) -> None:
+        self.choices = [_StubChoice(message)]
+        self.usage = usage
+
+
+def _make_stub_create(response: _StubResponse, captured_kwargs: dict):
+    def _create(**kwargs):
+        captured_kwargs.update(kwargs)
+        return response
+
+    return _create
 
 
 def test_config_defaults_match_spec():
@@ -55,10 +103,109 @@ def test_fake_client_raises_when_script_is_exhausted():
         client.chat([])
 
 
+def test_ollama_client_extracts_tool_call():
+    message = _StubMessage(
+        content="",
+        tool_calls=[_StubToolCall("call_1", "run_tests", '{"path": "src/"}')],
+        dump={"role": "assistant", "content": ""},
+    )
+    response = _StubResponse(message, usage=_StubUsage(7, 3))
+    captured: dict = {}
+    client = OllamaClient(LLMConfig())
+    client._client.chat.completions.create = _make_stub_create(response, captured)
+
+    reply = client.chat([{"role": "user", "content": "go"}])
+
+    assert reply.tool_calls == (
+        ToolCall(id="call_1", name="run_tests", arguments={"path": "src/"}),
+    )
+
+
+def test_ollama_client_plain_text_reply_has_no_tool_calls():
+    message = _StubMessage(
+        content="all done",
+        tool_calls=None,
+        dump={"role": "assistant", "content": "all done"},
+    )
+    response = _StubResponse(message, usage=_StubUsage(4, 2))
+    captured: dict = {}
+    client = OllamaClient(LLMConfig())
+    client._client.chat.completions.create = _make_stub_create(response, captured)
+
+    reply = client.chat([{"role": "user", "content": "go"}])
+
+    assert reply.tool_calls == ()
+
+
+def test_ollama_client_passes_num_ctx_and_conditionally_includes_tools():
+    message = _StubMessage(
+        content="ok", tool_calls=None, dump={"role": "assistant", "content": "ok"}
+    )
+    response = _StubResponse(message, usage=_StubUsage(1, 1))
+    captured: dict = {}
+    client = OllamaClient(LLMConfig())
+    client._client.chat.completions.create = _make_stub_create(response, captured)
+
+    client.chat([{"role": "user", "content": "go"}])
+    assert captured["extra_body"] == {"options": {"num_ctx": 16384}}
+    assert "tools" not in captured
+
+    captured.clear()
+    tools = [{"type": "function", "function": {"name": "run_tests"}}]
+    client.chat([{"role": "user", "content": "go"}], tools=tools)
+    assert captured["extra_body"] == {"options": {"num_ctx": 16384}}
+    assert captured["tools"] == tools
+
+
+def test_ollama_client_handles_missing_usage():
+    message = _StubMessage(
+        content="ok", tool_calls=None, dump={"role": "assistant", "content": "ok"}
+    )
+    response = _StubResponse(message, usage=None)
+    captured: dict = {}
+    client = OllamaClient(LLMConfig())
+    client._client.chat.completions.create = _make_stub_create(response, captured)
+
+    reply = client.chat([{"role": "user", "content": "go"}])
+
+    assert reply.prompt_tokens == 0
+    assert reply.completion_tokens == 0
+
+
+def test_ollama_client_treats_malformed_tool_call_arguments_as_empty_dict():
+    message = _StubMessage(
+        content="",
+        tool_calls=[_StubToolCall("call_1", "run_tests", "{not json")],
+        dump={"role": "assistant", "content": ""},
+    )
+    response = _StubResponse(message, usage=_StubUsage(1, 1))
+    captured: dict = {}
+    client = OllamaClient(LLMConfig())
+    client._client.chat.completions.create = _make_stub_create(response, captured)
+
+    reply = client.chat([{"role": "user", "content": "go"}])
+
+    assert reply.tool_calls[0].arguments == {}
+
+
+def test_ollama_client_treats_non_object_tool_call_arguments_as_empty_dict():
+    message = _StubMessage(
+        content="",
+        tool_calls=[_StubToolCall("call_1", "run_tests", "[1, 2, 3]")],
+        dump={"role": "assistant", "content": ""},
+    )
+    response = _StubResponse(message, usage=_StubUsage(1, 1))
+    captured: dict = {}
+    client = OllamaClient(LLMConfig())
+    client._client.chat.completions.create = _make_stub_create(response, captured)
+
+    reply = client.chat([{"role": "user", "content": "go"}])
+
+    assert reply.tool_calls[0].arguments == {}
+
+
 @pytest.mark.llm
 def test_live_model_answers_and_reports_usage():
-    from agentfix.llm.client import OllamaClient
-
     reply = OllamaClient().chat([{"role": "user", "content": "Reply with exactly: ok"}])
     assert "ok" in (reply.message.get("content") or "").lower()
     assert reply.prompt_tokens > 0
