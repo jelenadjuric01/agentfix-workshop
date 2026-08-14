@@ -29,9 +29,11 @@ def system_prompt(registry: ToolRegistry) -> str:
     return (
         "You are a Python bug-fixing agent working in a small project.\n"
         f"You have these tools: {names}.\n"
-        "Work in this order: run the tests to see what fails, read the relevant file, "
-        "then write the corrected file.\n"
+        "Work in this order: run the tests to see what fails, read the relevant file(s) "
+        "before editing, then write the corrected file.\n"
         "When you call write_file you must supply the COMPLETE file contents, not a diff.\n"
+        "Then run the tests again to confirm the fix worked — you are not finished until "
+        "they pass. If they still fail, read the new failure and try again.\n"
         "Make the smallest change that fixes the failure. Do not rewrite unrelated code."
     )
 
