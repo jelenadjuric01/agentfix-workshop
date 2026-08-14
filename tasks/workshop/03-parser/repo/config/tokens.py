@@ -6,4 +6,4 @@ def is_comment(line: str) -> bool:
 
 
 def clean(line: str) -> str:
-    return line
+    return line.strip()

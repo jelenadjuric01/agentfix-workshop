@@ -8,5 +8,5 @@ def parse(text: str) -> dict[str, str]:
         if not line or is_comment(line):
             continue
         key, _, value = line.partition("=")
-        settings[clean(key)] = clean(value)
+        settings[key] = value
     return settings
