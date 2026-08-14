@@ -1,0 +1,166 @@
+{
+  "suite": "humanevalfix",
+  "pass_at_1": 0.5,
+  "results": [
+    {
+      "task_id": "python-163",
+      "solved": false,
+      "steps_used": 5,
+      "prompt_tokens": 4108,
+      "completion_tokens": 290,
+      "duration_s": 19.27
+    },
+    {
+      "task_id": "python-28",
+      "solved": true,
+      "steps_used": 7,
+      "prompt_tokens": 5778,
+      "completion_tokens": 263,
+      "duration_s": 19.16
+    },
+    {
+      "task_id": "python-6",
+      "solved": false,
+      "steps_used": 3,
+      "prompt_tokens": 2338,
+      "completion_tokens": 268,
+      "duration_s": 15.35
+    },
+    {
+      "task_id": "python-70",
+      "solved": false,
+      "steps_used": 10,
+      "prompt_tokens": 13050,
+      "completion_tokens": 452,
+      "duration_s": 28.23
+    },
+    {
+      "task_id": "python-62",
+      "solved": false,
+      "steps_used": 10,
+      "prompt_tokens": 15555,
+      "completion_tokens": 1915,
+      "duration_s": 83.52
+    },
+    {
+      "task_id": "python-57",
+      "solved": true,
+      "steps_used": 7,
+      "prompt_tokens": 6959,
+      "completion_tokens": 452,
+      "duration_s": 24.91
+    },
+    {
+      "task_id": "python-35",
+      "solved": true,
+      "steps_used": 7,
+      "prompt_tokens": 5982,
+      "completion_tokens": 318,
+      "duration_s": 19.03
+    },
+    {
+      "task_id": "python-26",
+      "solved": false,
+      "steps_used": 10,
+      "prompt_tokens": 11669,
+      "completion_tokens": 447,
+      "duration_s": 27.15
+    },
+    {
+      "task_id": "python-139",
+      "solved": true,
+      "steps_used": 7,
+      "prompt_tokens": 6517,
+      "completion_tokens": 346,
+      "duration_s": 20.37
+    },
+    {
+      "task_id": "python-22",
+      "solved": true,
+      "steps_used": 7,
+      "prompt_tokens": 6552,
+      "completion_tokens": 343,
+      "duration_s": 20.1
+    },
+    {
+      "task_id": "python-151",
+      "solved": false,
+      "steps_used": 10,
+      "prompt_tokens": 14376,
+      "completion_tokens": 421,
+      "duration_s": 27.9
+    },
+    {
+      "task_id": "python-108",
+      "solved": false,
+      "steps_used": 10,
+      "prompt_tokens": 14417,
+      "completion_tokens": 613,
+      "duration_s": 33.8
+    },
+    {
+      "task_id": "python-8",
+      "solved": true,
+      "steps_used": 7,
+      "prompt_tokens": 6396,
+      "completion_tokens": 365,
+      "duration_s": 20.92
+    },
+    {
+      "task_id": "python-7",
+      "solved": true,
+      "steps_used": 7,
+      "prompt_tokens": 6860,
+      "completion_tokens": 331,
+      "duration_s": 20.11
+    },
+    {
+      "task_id": "python-23",
+      "solved": true,
+      "steps_used": 6,
+      "prompt_tokens": 4741,
+      "completion_tokens": 218,
+      "duration_s": 15.31
+    },
+    {
+      "task_id": "python-55",
+      "solved": false,
+      "steps_used": 5,
+      "prompt_tokens": 3911,
+      "completion_tokens": 317,
+      "duration_s": 17.92
+    },
+    {
+      "task_id": "python-59",
+      "solved": false,
+      "steps_used": 3,
+      "prompt_tokens": 2285,
+      "completion_tokens": 400,
+      "duration_s": 19.65
+    },
+    {
+      "task_id": "python-129",
+      "solved": true,
+      "steps_used": 5,
+      "prompt_tokens": 5100,
+      "completion_tokens": 408,
+      "duration_s": 21.36
+    },
+    {
+      "task_id": "python-154",
+      "solved": true,
+      "steps_used": 7,
+      "prompt_tokens": 7218,
+      "completion_tokens": 461,
+      "duration_s": 25.95
+    },
+    {
+      "task_id": "python-143",
+      "solved": false,
+      "steps_used": 10,
+      "prompt_tokens": 14569,
+      "completion_tokens": 720,
+      "duration_s": 37.96
+    }
+  ]
+}
