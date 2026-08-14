@@ -93,7 +93,9 @@ def _docker_unavailable_reason() -> str | None:
         ["docker", "images", "-q", DEFAULT_IMAGE], capture_output=True, text=True, check=False
     )
     if not images.stdout.strip():
-        return f"{DEFAULT_IMAGE} not built (docker build -f Dockerfile.sandbox .)"
+        return (
+            f"{DEFAULT_IMAGE} not built (docker build -t agentfix-sandbox -f Dockerfile.sandbox .)"
+        )
     return None
 
 

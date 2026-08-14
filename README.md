@@ -91,7 +91,8 @@ runs it end to end. If Ollama does not come up under Kaggle, fall back to tier 3
 
 ```bash
 ollama pull qwen2.5-coder:1.5b
-printf 'FROM qwen2.5-coder:1.5b\nPARAMETER num_ctx 16384\n' | ollama create agentfix-qwen -f -
+printf 'FROM qwen2.5-coder:1.5b\nPARAMETER num_ctx 16384\n' > /tmp/Modelfile.agentfix-qwen
+ollama create agentfix-qwen -f /tmp/Modelfile.agentfix-qwen
 MELLUM_MODEL=agentfix-qwen uv run agentfix doctor
 MELLUM_MODEL=agentfix-qwen uv run agentfix solve tasks/workshop/01-shopcart --verbose
 ```
