@@ -28,6 +28,9 @@ addopts = "-m 'not llm'"
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
 [tool.black]
 line-length = 100
 target-version = ["py312"]
