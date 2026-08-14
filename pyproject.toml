@@ -20,7 +20,7 @@ build-backend = "hatchling.build"
 packages = ["src/agentfix"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["exercises"]
 markers = ["llm: requires a running Ollama with the Mellum2 model (deselect with '-m \"not llm\"')"]
 addopts = "-m 'not llm'"
 

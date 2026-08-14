@@ -9,7 +9,8 @@ from agentfix.tools.base import ToolResult
 class RunTestsTool:
     name = "run_tests"
     description = "Run the project's test suite and return the result. This is the source of truth."
-    parameters = {"type": "object", "properties": {}}
+    # TODO(stage-1): the JSON Schema the model sees. run_tests needs no arguments.
+    parameters: dict = {}
 
     def __init__(
         self,
@@ -25,8 +26,6 @@ class RunTestsTool:
         self.last_result: ExecResult | None = None
 
     def run(self) -> ToolResult:
-        result = self.backend.run(self.root, self.command, timeout_s=self.timeout_s)
-        self.last_result = result
-
-        headline = "All tests passed." if result.passed else "Tests failed."
-        return ToolResult(True, f"{headline}\n\n{result.output}".strip())
+        # TODO(stage-1): run the tests via self.backend, store self.last_result,
+        # and return a ToolResult whose content tells the model what happened.
+        raise NotImplementedError("stage 1: implement RunTestsTool.run")

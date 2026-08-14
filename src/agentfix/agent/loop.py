@@ -45,8 +45,9 @@ def task_prompt(task: Task) -> str:
 
 
 def is_done(run_tests: RunTestsTool) -> bool:
-    """The agent is done when the tests actually pass — never because it says so."""
-    return run_tests.last_result is not None and run_tests.last_result.passed
+    # TODO(stage-3): the agent is done when the tests actually pass.
+    # Not when the model stops calling tools. Not when it says "DONE".
+    return False
 
 
 def _call_signature(call: ToolCall) -> tuple[str, str]:
@@ -112,19 +113,9 @@ def run_agent(
                     continue
 
                 previous_signature = signature
-                tool_started = time.time()
-                outcome = registry.dispatch(call)
-                messages.append(outcome.as_message())
-                tracer.record(
-                    TraceEvent(
-                        step=step,
-                        kind="tool",
-                        name=call.name,
-                        detail=outcome.result.content,
-                        prompt_tokens=reply.prompt_tokens,
-                        latency_s=round(time.time() - tool_started, 2),
-                    )
-                )
+                # TODO(stage-2): dispatch the call through the registry and append the
+                # resulting tool message to `messages`. Keep the tool_call_id.
+                raise NotImplementedError("stage 2: dispatch the tool call")
             continue
 
         if is_done(run_tests):
