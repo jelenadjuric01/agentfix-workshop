@@ -46,7 +46,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "solve":
         from agentfix.runner import solve_task
 
-        result = solve_task(args.task_dir, verbose=args.verbose, max_steps=args.max_steps)
+        try:
+            result = solve_task(args.task_dir, verbose=args.verbose, max_steps=args.max_steps)
+        except Exception as error:
+            print(f"error: {type(error).__name__}: {error}", file=sys.stderr)
+            print(
+                "If you haven't finished the exercises yet, this is expected — see "
+                "exercises/README.md.",
+                file=sys.stderr,
+            )
+            return 1
         status = "SOLVED" if result.solved else "NOT SOLVED"
         print(
             f"\n{status}  {result.task_id}  "
