@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -9,8 +10,6 @@ from agentfix.sandbox.base import ExecResult
 
 TRUNCATION_MARKER = "\n[...truncated]"
 
-# Currently unused: RLIMIT_AS with this value breaks subprocess startup on
-# macOS. Kept for the controller's decision; see _apply_limits docstring.
 MAX_ADDRESS_SPACE_BYTES = 2 * 1024**3
 MAX_CPU_SECONDS = 30
 MAX_FILE_SIZE_BYTES = 16 * 1024**2
@@ -18,22 +17,18 @@ MAX_PROCESSES = 64
 
 
 def _apply_limits() -> None:
-    """Constrain the child process. POSIX only; a no-op elsewhere.
-
-    RLIMIT_AS is deliberately NOT set here: on macOS (verified empirically on
-    Apple Silicon, Python 3.12) capping RLIMIT_AS to 2 GiB makes every child
-    process fail at interpreter startup with
-    `subprocess.SubprocessError: Exception occurred in preexec_fn.`, because
-    CPython reserves a large virtual address space up front. That would make
-    every sandboxed run report a false failure rather than enforce a memory
-    limit. See task-3-report.md for the reproduction. Flagged for the
-    controller to rule on (e.g. platform-conditional limit, or a different
-    enforcement mechanism) rather than silently dropped.
-    """
+    """Constrain the child process. POSIX only; a no-op elsewhere."""
     try:
         import resource
     except ImportError:  # Windows
         return
+
+    # RLIMIT_AS is Linux-only: on macOS/Apple Silicon it aborts interpreter
+    # startup entirely (CPython reserves a large virtual address space up
+    # front), so it is only safe to apply on Linux, which is also where the
+    # workshop's memory-constrained student environments actually run.
+    if sys.platform.startswith("linux"):
+        resource.setrlimit(resource.RLIMIT_AS, (MAX_ADDRESS_SPACE_BYTES, MAX_ADDRESS_SPACE_BYTES))
 
     resource.setrlimit(resource.RLIMIT_CPU, (MAX_CPU_SECONDS, MAX_CPU_SECONDS))
     resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_BYTES))

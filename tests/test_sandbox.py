@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+from agentfix.sandbox import subprocess_backend as sb
 from agentfix.sandbox.base import get_backend
 from agentfix.sandbox.subprocess_backend import SubprocessBackend
 
@@ -54,3 +55,30 @@ def test_secrets_in_parent_env_are_not_visible_to_executed_code(tmp_path, monkey
 def test_get_backend_defaults_to_subprocess(monkeypatch):
     monkeypatch.delenv("AGENTFIX_SANDBOX", raising=False)
     assert isinstance(get_backend(), SubprocessBackend)
+
+
+def test_apply_limits_sets_rlimit_as_only_on_linux(monkeypatch):
+    class FakeResource:
+        RLIMIT_AS = "AS"
+        RLIMIT_CPU = "CPU"
+        RLIMIT_FSIZE = "FSIZE"
+        RLIMIT_NPROC = "NPROC"
+
+        def __init__(self):
+            self.calls = []
+
+        def setrlimit(self, which, limits):
+            self.calls.append(which)
+
+    fake_resource = FakeResource()
+    monkeypatch.setitem(sys.modules, "resource", fake_resource)
+
+    monkeypatch.setattr(sb.sys, "platform", "linux")
+    sb._apply_limits()
+    assert "AS" in fake_resource.calls
+
+    fake_resource.calls.clear()
+    monkeypatch.setattr(sb.sys, "platform", "darwin")
+    sb._apply_limits()
+    assert "AS" not in fake_resource.calls
+    assert {"CPU", "FSIZE", "NPROC"}.issubset(fake_resource.calls)
