@@ -1,0 +1,6 @@
+{
+  "task_id": "01-shopcart",
+  "test_command": ["-m", "pytest", "-q"],
+  "expected_failures": ["test_total_with_tax"],
+  "prompt": "The test suite for this project is failing. Find the bug and fix it."
+}
