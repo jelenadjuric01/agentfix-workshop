@@ -1,8 +1,11 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 from agentfix.sandbox import subprocess_backend as sb
 from agentfix.sandbox.base import get_backend
+from agentfix.sandbox.docker_backend import DockerBackend
 from agentfix.sandbox.subprocess_backend import SubprocessBackend
 
 
@@ -52,9 +55,35 @@ def test_secrets_in_parent_env_are_not_visible_to_executed_code(tmp_path, monkey
     assert result.passed is True
 
 
+def test_invalid_utf8_output_does_not_crash_the_backend(tmp_path):
+    _write(
+        tmp_path,
+        "test_binary.py",
+        "import sys\n"
+        "def test_binary():\n"
+        "    sys.stdout.buffer.write(b'\\xff\\xfe not valid utf-8')\n"
+        "    sys.stdout.buffer.flush()\n"
+        "    assert True\n",
+    )
+    result = SubprocessBackend().run(tmp_path, (sys.executable, "-m", "pytest", "-q", "-s"))
+    assert result.passed is True
+    assert result.timed_out is False
+
+
 def test_get_backend_defaults_to_subprocess(monkeypatch):
     monkeypatch.delenv("AGENTFIX_SANDBOX", raising=False)
     assert isinstance(get_backend(), SubprocessBackend)
+
+
+def test_get_backend_returns_docker_backend(monkeypatch):
+    monkeypatch.setenv("AGENTFIX_SANDBOX", "docker")
+    assert isinstance(get_backend(), DockerBackend)
+
+
+def test_get_backend_raises_on_unknown_value(monkeypatch):
+    monkeypatch.setenv("AGENTFIX_SANDBOX", "bogus")
+    with pytest.raises(ValueError):
+        get_backend()
 
 
 def test_apply_limits_sets_rlimit_as_only_on_linux(monkeypatch):

@@ -55,6 +55,7 @@ class SubprocessBackend:
                 env=env,
                 capture_output=True,
                 text=True,
+                errors="replace",
                 timeout=timeout_s,
                 preexec_fn=_apply_limits if hasattr(os, "fork") else None,
                 check=False,
