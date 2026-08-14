@@ -128,14 +128,23 @@ Intel laptop.
 
 | Metric | Result |
 |---|---|
-| Generation throughput | 51 tok/s (700 tokens in 13.7s) |
+| Generation throughput | 51 tok/s (372 tokens in 7.3s, as `agentfix doctor` reports it) |
 | Prefill throughput | ~480 tok/s (a 3,438-token prompt took ~7s before the first output token) |
 | Cold model load | ~3.5s, one-time |
 | GGUF size on disk | 8.07 GB |
-| Workshop suite (`01`–`03`), pass@1 | 1.00 (3/3), ~39.7s wall clock |
-| HumanEvalFix (20 vendored tasks), pass@1 | 0.50 (10/20), median 7 steps, max 10, 167,729 tokens, 8m38s wall clock |
+| Loaded context window | 16,384 tokens (`ollama ps`, via the derived model) |
+| Workshop suite (`01`–`03`), pass@1 | 1.00 (3/3), 44.5s wall clock, peak prompt 1,456 tok |
+| HumanEvalFix (20 vendored tasks), pass@1 | 0.60 (12/20), median 7 steps, max 10, 185,235 tokens, 8m09s wall clock, peak prompt 2,998 tok |
 
-The HumanEvalFix number is exactly why that eval segment is demo-only in the workshop — it does
+pass@1 on HumanEvalFix was **0.50 before** the loop's stop condition was made real. The old loop
+ended a run on any text-only reply, so four failures stopped at 3–5 steps of 10 with the budget
+unused; now a text-only reply while the tests are red gets a nudge and another step, and every one
+of the 8 remaining failures uses all 10 steps. The context-window fix landed in the same
+measurement, so the two effects are not separated — note that the largest single prompt was 2,998
+tokens against the old 3,072-token usable window, i.e. the longest runs really were at the edge.
+Nothing was tuned to move the number.
+
+The wall-clock figure is exactly why that eval segment is demo-only in the workshop — it does
 not fit in a 90-minute session as a live activity. `results/precomputed/` ships both runs so
 students can discuss the numbers without waiting for them. `results/legacy/` holds the predecessor
 project's Qwen2.5-Coder-1.5B baseline on a GPU-served 164-task HumanEvalFix run (pass@1 ≈ 0.30) —
@@ -145,6 +154,12 @@ its own predecessor's benchmark.
 
 ## Known limitations
 
+- **Docker container execution is still unverified.** Every isolation flag (`--network none`, the
+  memory/pid/cpu caps, `--read-only`, `--cap-drop ALL`, …) is now asserted by tests that run
+  without a daemon, so the argv cannot silently regress. But the five tests that actually start a
+  container skip until you build the image: `docker build -t agentfix-sandbox -f Dockerfile.sandbox .`
+  The development machine's Docker VM could not reach the registry, so that build never completed
+  here. Run it before the safety demo depends on the runtime behaviour.
 - **The Kaggle notebook has never been run on Kaggle.** `notebooks/kaggle.ipynb` is built from
   commands verified locally, but nobody has executed it end to end in a Kaggle container. Its
   cells now stop with a clear error rather than cloning a placeholder URL, and it clones the

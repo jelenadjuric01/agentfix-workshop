@@ -71,6 +71,26 @@ def _guard_observation(name: str, hits: int) -> str:
     )
 
 
+def _guarded(call: ToolCall, step: int, hits: int) -> tuple[dict, TraceEvent]:
+    """A repeated call gets an observation and a trace line instead of a re-execution."""
+    return (
+        {
+            "role": "tool",
+            "tool_call_id": call.id,
+            "name": call.name,
+            "content": _guard_observation(call.name, hits),
+        },
+        TraceEvent(
+            step=step,
+            kind="tool",
+            name=call.name,
+            detail=f"guarded — identical call #{hits + 1} in a row",
+            prompt_tokens=0,
+            latency_s=0.0,
+        ),
+    )
+
+
 def run_agent(
     task: Task,
     work_dir: Path,
@@ -120,24 +140,9 @@ def run_agent(
                 signature = _call_signature(call)
                 if signature == previous_signature:
                     guard_hits += 1
-                    messages.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": call.id,
-                            "name": call.name,
-                            "content": _guard_observation(call.name, guard_hits),
-                        }
-                    )
-                    tracer.record(
-                        TraceEvent(
-                            step=step,
-                            kind="tool",
-                            name=call.name,
-                            detail=f"guarded — identical call #{guard_hits + 1} in a row",
-                            prompt_tokens=0,
-                            latency_s=0.0,
-                        )
-                    )
+                    message, event = _guarded(call, step, guard_hits)
+                    messages.append(message)
+                    tracer.record(event)
                     continue
 
                 guard_hits = 0

@@ -5,16 +5,20 @@ the session; this document is what to run and say, minute by minute.
 
 ## Pre-workshop checklist
 
-- [ ] Pre-work email sent (at least a week ahead): pull the 8 GB model, run `agentfix doctor`,
-      send output; phone-verify a Kaggle account if planning tier 2; bring a laptop charger.
+- [ ] Pre-work email sent (at least a week ahead): pull the 8 GB model, **run
+      `ollama create agentfix-mellum2 -f Modelfile`**, run `agentfix doctor`, send the output;
+      phone-verify a Kaggle account if planning tier 2; bring a laptop charger.
 - [ ] `doctor` outputs collected from attendees and triaged — anyone still failing gets a remedy
-      or a tier-3/pair-up plan before the room opens.
+      or a tier-3/pair-up plan before the room opens. **`ram` and `context window` are the two
+      that decide someone's tier**; a `context window: 4096` line means they skipped the
+      `ollama create` and their agent will lose its own system prompt on long runs.
 - [ ] USB sticks prepared with the model GGUF, for anyone whose wifi can't do 8 GB on the day.
 - [ ] Endpoint decision made per student: tier 1 (local), tier 2 (Kaggle), or tier 3 (1.5B model) —
-      know this going in, don't discover it live.
+      `doctor`'s `ram` line now says this for you, so collect it rather than asking people.
 - [ ] `git checkout solutions` tested end to end on the instructor machine (see 0:08 below).
-- [ ] Docker demo machine has a running daemon, verified same-day — it is untested in this repo's
-      CI and has never been run against a live daemon here.
+- [ ] Docker demo machine has a running daemon and a built image, verified same-day:
+      `docker build -t agentfix-sandbox -f Dockerfile.sandbox .`. Without the image the daemon
+      tests skip with that command as the reason; the isolation-flag assertions run regardless.
 
 ## Minute-by-minute
 
@@ -26,7 +30,7 @@ the session; this document is what to run and say, minute by minute.
 | 0:24–0:36 | **Stage 1** — `run_tests` + its schema | `git checkout main` (back to the stub); `uv run pytest exercises/stage_1 -v` | Students edit `src/agentfix/tools/tests_tool.py`. Stuck? `git checkout stage-1-solution`. |
 | 0:36–0:50 | **Stage 2** — loop dispatch; run on task 01 | `uv run pytest exercises/stage_2 -v` then `uv run agentfix solve tasks/workshop/01-shopcart --verbose` | Students edit the dispatch block in `src/agentfix/agent/loop.py`. The classic bug is forgetting `tool_call_id` — the test names it directly. Checkpoint: `stage-2-solution`. |
 | 0:50–1:08 | **Stage 3** — stop condition; run on task 02 | `uv run pytest exercises/stage_3 -v` then `uv run agentfix solve tasks/workshop/02-invoice --verbose` | The naive "model stopped calling tools" or "model said DONE" both fail here — the scripted model in the test claims success while tests still fail. Task 02's bug is not in the file the failing test points at, which is why `list_files`/`read_file` matter. Checkpoint: `stage-3-solution`. **This segment is protected at all costs — cut everything else before this.** |
-| 1:08–1:16 | Eval discussion (demo-only) | show `results/precomputed/workshop.json` and `results/precomputed/humanevalfix.json`; do **not** run a live eval | HumanEvalFix (20 tasks) took **8m38s wall clock** and 167,729 tokens on this machine at 51 tok/s — that is exactly why this is discussion, not a live activity. pass@1 is 0.50 (10/20), median 7 steps, max 10 (the cap). Compare against `results/legacy/` — the predecessor's 1.5B model scored ~0.30 pass@1 on a larger, GPU-served run: not apples-to-apples, but a useful contrast on tool-augmented agents vs. a smaller raw model. |
+| 1:08–1:16 | Eval discussion (demo-only) | show `results/precomputed/workshop.json` and `results/precomputed/humanevalfix.json`; do **not** run a live eval | HumanEvalFix (20 tasks) took **8m09s wall clock** and 185,235 tokens on this machine at 51 tok/s — that is exactly why this is discussion, not a live activity. pass@1 is 0.60 (12/20), median 7 steps, max 10 (the cap); every one of the 8 failures spent all 10 steps. The best story here: it was 0.50 until the loop's stop condition stopped being decorative — four failures used to quit at 3–5 steps with budget left. Two lines of loop change moved pass@1 more than any prompt tweak did. Compare against `results/legacy/` — the predecessor's 1.5B model scored ~0.30 pass@1 on a larger, GPU-served run: not apples-to-apples, but a useful contrast on tool-augmented agents vs. a smaller raw model. |
 | 1:16–1:30 | Sandbox safety + Docker demo; Thinking variant; next steps | `docker build -t agentfix-sandbox -f Dockerfile.sandbox .` then `AGENTFIX_SANDBOX=docker uv run pytest tests/test_docker_backend.py -v` | Your agent executes model-written code — here is what that means and what production systems do about it. Two boundaries: the tool layer confines *paths* (`resolve_in_root` rejects escapes before a read/write happens); the sandbox confines *execution* (no network, memory/pid/cpu caps, non-root). **Verify the Docker daemon is running before this segment** — it is unverified in this repo (the daemon was not running during development, so these tests skip by default) and a live failure here undercuts the safety point. Close with the Mellum2 Thinking variant as the natural next step (same code, one env var, visible `<think>` blocks) and mention planning/reflection/parallel tools as deliberately out of scope (see `ARCHITECTURE.md`). |
 
 ## Cut order when the room runs slow

@@ -36,8 +36,9 @@ def run_agent(task, work_dir, llm, registry, run_tests, max_steps=MAX_STEPS, tra
                     # instead of a re-execution, with wording that escalates on the second
                     # repeat. See "Loop guard" below.
                     guard_hits += 1
-                    messages.append({...})
-                    tracer.record(TraceEvent(..., detail="guarded — ..."))
+                    message, event = _guarded(call, step, guard_hits)
+                    messages.append(message)
+                    tracer.record(event)
                     continue
                 guard_hits = 0
                 previous_signature = signature
@@ -176,13 +177,31 @@ matters less than it sounds: the Kaggle tier (tier 2) runs on Linux, so the memo
 exactly where the weakest laptops in the room are running — the machines with no cap are, by
 construction, the ones with 16 GB+ of their own RAM to begin with.
 
-### Docker isolation is unverified in this repo
+### Docker: the flags are tested, the container is not
 
-The Docker daemon was not running during development, so `tests/test_docker_backend.py`'s three
-tests skip rather than pass. `DockerBackend` and its tests exist and are written to the same
-`ExecutionBackend` protocol as `SubprocessBackend`, but "the code is written" is not the same claim
-as "this has been run against a container." Run it against a live daemon before the sandbox-safety
-demo depends on it working.
+`DockerBackend.build_argv` is a pure function, so **every isolation flag is asserted by tests that
+need no daemon at all** — `--network none`, `--memory 512m`, `--pids-limit 128`, `--cpus 1`,
+`--user runner`, `--cap-drop ALL`, `--security-opt no-new-privileges`, `--read-only`, the read-only
+`:ro` mount, `--tmpfs /tmp`, and a unique `--name` per run. That matters because these assertions
+used to sit *below* a module-level `pytestmark` skip, so on any machine without Docker (including
+this one and CI) nothing checked that `--network none` was present at all. Deleting it would have
+been green everywhere it mattered.
+
+The mount is read-only on purpose: the filesystem tools write on the **host**, so the container
+needs no write access to the workspace at all. `-p no:cacheprovider` and
+`PYTHONDONTWRITEBYTECODE=1` keep pytest from trying, and `--tmpfs /tmp` with `HOME=/tmp` gives it
+somewhere scratch to go.
+
+On a `subprocess.TimeoutExpired` only the docker *client* is killed — the container keeps running —
+so `run()` names the container and `docker kill`s it by name in the except branch.
+
+**Still unverified: actual container execution.** The five tests that need a live daemon (pass,
+fail, no network, unwritable workspace, timeout leaves nothing behind) skip with the reason
+`agentfix-sandbox:latest not built (docker build -f Dockerfile.sandbox .)`. On the development
+machine the daemon does now run, but its VM cannot reach the Docker registry, so `python:3.12-slim`
+could not be pulled and the image could not be built. Build the image and run
+`uv run pytest tests/test_docker_backend.py -v` on a machine with registry access before the
+sandbox-safety demo depends on the runtime behaviour.
 
 ## HumanEvalFix runs as a plain script, not pytest
 
