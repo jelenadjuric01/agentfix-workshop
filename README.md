@@ -242,10 +242,21 @@ uv run agentfix solve tasks/workshop/01-shopcart --verbose    # run the agent on
 uv run agentfix eval --suite workshop --limit 3               # run the agent over a suite
 uv run agentfix eval --suite humanevalfix --limit 3
 uv run pytest exercises/stage_1                                # or stage_2, stage_3
+uv run pytest                                                  # every test that needs no model
+uv run pytest --all                                            # add the ones that need Ollama
+uv run pytest -m llm                                           # only the ones that need Ollama
 ```
 
 `solve` also accepts `--max-steps N` (default 10). `eval --suite` accepts `workshop` or
 `humanevalfix`.
+
+### Tests and the `llm` marker
+
+One test in this repo talks to a real model; everything else runs offline against a scripted fake
+(`src/agentfix/llm/fake.py`). That test carries `@pytest.mark.llm`, and `pyproject.toml` sets
+`addopts = "-m 'not llm'"`, so a bare `uv run pytest` is always offline-safe — a broken Ollama
+cannot fail your suite. `--all` opts back in, `-m llm` runs that test alone, and combining `--all`
+with an explicit `-m` is a usage error rather than a silent override.
 
 Every command above is identical on macOS, Linux, WSL2, and Windows PowerShell — forward slashes in
 task paths work in PowerShell too. Only environment variables differ: `MELLUM_MODEL=x uv run ...`
