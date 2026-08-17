@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -28,5 +29,5 @@ class Tracer:
                 f"[ctx {event.prompt_tokens} tok, {event.latency_s:.1f}s]  {detail}"
             )
 
-    def as_json(self) -> list[dict]:
+    def as_json(self) -> list[dict[str, Any]]:
         return [asdict(event) for event in self.events]

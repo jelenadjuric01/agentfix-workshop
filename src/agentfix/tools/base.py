@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from agentfix.llm.types import INVALID_ARGUMENTS, ToolCall
 
@@ -29,7 +29,7 @@ class ToolOutcome:
     name: str
     result: ToolResult
 
-    def as_message(self) -> dict:
+    def as_message(self) -> dict[str, Any]:
         return {
             "role": "tool",
             "tool_call_id": self.call_id,
@@ -41,16 +41,22 @@ class ToolOutcome:
 class Tool(Protocol):
     name: str
     description: str
-    parameters: dict
+    parameters: dict[str, Any]
 
-    def run(self, **kwargs) -> ToolResult: ...
+    # `*args: Any, **kwargs: Any` is the one signature mypy treats as compatible with ANY
+    # concrete signature. Each tool declares its own named parameters (`run(self)`,
+    # `run(self, path)`, `run(self, path, content)`) and `dispatch` supplies them by keyword
+    # from model-generated JSON, so the Protocol cannot pin them down. A `**kwargs`-only
+    # declaration here looks equivalent but is not: it demands an implementation that accepts
+    # arbitrary keywords, which none of the tools do.
+    def run(self, *args: Any, **kwargs: Any) -> ToolResult: ...
 
 
 class ToolRegistry:
     def __init__(self, tools: Sequence[Tool]) -> None:
         self._tools: dict[str, Tool] = {tool.name: tool for tool in tools}
 
-    def schemas(self) -> list[dict]:
+    def schemas(self) -> list[dict[str, Any]]:
         return [
             {
                 "type": "function",

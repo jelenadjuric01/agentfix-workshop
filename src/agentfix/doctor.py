@@ -9,6 +9,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from agentfix.config import BASE_MODEL, MIN_CONTEXT_LENGTH, LLMConfig
 
@@ -21,8 +22,6 @@ SERVE_HINT = (
 
 MIN_TOTAL_RAM_BYTES = 16 * 1024**3
 COMFORTABLE_FREE_RAM_BYTES = 9 * 1024**3
-
-_CAPTURE = {"capture_output": True, "text": True, "check": True}
 
 # One short call measures cold model load and prefill, not generation. So warm up first,
 # throw that call away, then time a prompt long enough that per-call overhead stops
@@ -38,18 +37,26 @@ class Check:
     detail: str
 
 
-def _get_json(url: str, timeout_s: float = 5.0) -> dict | None:
+def _get_json(url: str, timeout_s: float = 5.0) -> dict[str, Any] | None:
     try:
         with urllib.request.urlopen(url, timeout=timeout_s) as response:
-            return json.loads(response.read().decode("utf-8"))
+            payload = json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, OSError, ValueError):
         return None
+    # json.loads returns Any; every caller indexes this like an object, so a list or a
+    # bare string from an unexpected endpoint should read as "no data", not crash later.
+    return payload if isinstance(payload, dict) else None
 
 
 def _check_python() -> Check:
     version = sys.version_info
     ok = (version.major, version.minor) >= (3, 12)
     return Check("python", ok, f"{sys.version.split()[0]}" + ("" if ok else " — need >= 3.12"))
+
+
+def _capture(command: list[str]) -> str:
+    """stdout of a successful command. Raises CalledProcessError/OSError otherwise."""
+    return subprocess.run(command, capture_output=True, text=True, check=True).stdout
 
 
 def _memory_bytes() -> tuple[int | None, int | None]:
@@ -67,14 +74,14 @@ def _memory_bytes() -> tuple[int | None, int | None]:
 
     if sys.platform == "darwin":
         try:
-            total = int(subprocess.run(["sysctl", "-n", "hw.memsize"], **_CAPTURE).stdout)
-            page = int(subprocess.run(["sysctl", "-n", "hw.pagesize"], **_CAPTURE).stdout)
+            total = int(_capture(["sysctl", "-n", "hw.memsize"]))
+            page = int(_capture(["sysctl", "-n", "hw.pagesize"]))
             counts = {
                 line.split(":")[0].strip(): int(line.split(":")[1].strip().rstrip("."))
-                for line in subprocess.run(["vm_stat"], **_CAPTURE).stdout.splitlines()
+                for line in _capture(["vm_stat"]).splitlines()
                 if ":" in line and line.split(":")[1].strip().rstrip(".").isdigit()
             }
-        except (OSError, ValueError):
+        except (OSError, ValueError, subprocess.CalledProcessError):
             return None, None
         reclaimable = ("Pages free", "Pages inactive", "Pages speculative", "Pages purgeable")
         return total, sum(counts.get(key, 0) for key in reclaimable) * page

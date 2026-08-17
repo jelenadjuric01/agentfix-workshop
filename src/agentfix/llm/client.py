@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from openai import OpenAI
 
@@ -15,8 +16,10 @@ class OllamaClient:
         self.config = config or LLMConfig.from_env()
         self._client = OpenAI(base_url=self.config.base_url, api_key="agentfix")
 
-    def chat(self, messages: list[dict], tools: list[dict] | None = None) -> LLMReply:
-        kwargs: dict = {
+    def chat(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
+    ) -> LLMReply:
+        kwargs: dict[str, Any] = {
             "model": self.config.model,
             "messages": messages,
             "temperature": self.config.temperature,
@@ -52,7 +55,7 @@ class OllamaClient:
         )
 
 
-def _parse_arguments(raw: str | None) -> dict:
+def _parse_arguments(raw: str | None) -> dict[str, Any]:
     if not raw:
         return {}
     try:

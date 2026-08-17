@@ -4,6 +4,7 @@ import json
 import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 from agentfix.agent.loop import MAX_STEPS, AgentResult
 from agentfix.config import REPO_ROOT
@@ -26,7 +27,7 @@ class EvalReport:
             return 0.0
         return sum(1 for result in self.results if result.solved) / len(self.results)
 
-    def to_json(self) -> dict:
+    def to_json(self) -> dict[str, Any]:
         return {
             "suite": self.suite,
             "pass_at_1": self.pass_at_1,

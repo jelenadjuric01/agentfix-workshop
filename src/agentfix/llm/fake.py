@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from agentfix.llm.types import LLMReply, ToolCall
 
@@ -15,7 +16,7 @@ def assistant_text(text: str, prompt_tokens: int = 10) -> LLMReply:
 
 
 def assistant_tool_call(
-    name: str, arguments: dict, call_id: str = "call_1", prompt_tokens: int = 10
+    name: str, arguments: dict[str, Any], call_id: str = "call_1", prompt_tokens: int = 10
 ) -> LLMReply:
     message = {
         "role": "assistant",
@@ -42,9 +43,11 @@ class FakeLLMClient:
     def __init__(self, replies: list[LLMReply]) -> None:
         self._replies = list(replies)
         self._index = 0
-        self.calls: list[list[dict]] = []
+        self.calls: list[list[dict[str, Any]]] = []
 
-    def chat(self, messages: list[dict], tools: list[dict] | None = None) -> LLMReply:
+    def chat(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
+    ) -> LLMReply:
         assert self._index < len(self._replies), (
             f"FakeLLMClient script exhausted after {self._index} call(s); "
             "the agent asked for more turns than the test scripted"

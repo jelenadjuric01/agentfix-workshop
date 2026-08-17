@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from agentfix.agent.trace import Tracer, TraceEvent
 from agentfix.llm.types import LLMClient, LLMReply, ToolCall
@@ -71,7 +72,7 @@ def _guard_observation(name: str, hits: int) -> str:
     )
 
 
-def _guarded(call: ToolCall, step: int, hits: int) -> tuple[dict, TraceEvent]:
+def _guarded(call: ToolCall, step: int, hits: int) -> tuple[dict[str, Any], TraceEvent]:
     """A repeated call gets an observation and a trace line instead of a re-execution."""
     return (
         {
@@ -101,7 +102,7 @@ def run_agent(
     tracer: Tracer | None = None,
 ) -> AgentResult:
     tracer = tracer or Tracer()
-    messages: list[dict] = [
+    messages: list[dict[str, Any]] = [
         {"role": "system", "content": system_prompt(registry)},
         {"role": "user", "content": task_prompt(task)},
     ]
