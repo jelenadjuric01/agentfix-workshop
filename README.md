@@ -283,11 +283,21 @@ Nothing was tuned to move the number.
 
 The wall-clock figure is exactly why that eval segment is demo-only in the workshop — it does
 not fit in a 90-minute session as a live activity. `results/precomputed/` ships both runs so
-students can discuss the numbers without waiting for them. `results/legacy/` holds the predecessor
-project's Qwen2.5-Coder-1.5B baseline on a GPU-served 164-task HumanEvalFix run (pass@1 ≈ 0.30) —
-not an apples-to-apples comparison (different task count, different hardware, different harness),
-but a useful contrast: a 12B model with tool access roughly doubles a smaller model's fix rate on
-its own predecessor's benchmark.
+students can discuss the numbers without waiting for them.
+
+For contrast, the predecessor project's baseline: `Qwen/Qwen2.5-Coder-1.5B-Instruct` on a GPU, over
+all 164 HumanEvalFix Python tasks, **pass@1 = 0.305** (50/164) with greedy decoding. That run was
+**single-shot** — one patch per task, graded by running the tests, no loop and no tools, which is the
+difference that matters here and not the parameter count. It also came with a 13-config decoding
+sweep (temperature, top-p, beams, repetition penalty) spanning 0.262–0.317; with one run per config
+and n=164, the binomial standard error is ±0.036, so that whole spread is noise. Only 31 of the 164
+tasks changed verdict across all 13 configs. Decoding parameters bought almost nothing; adding a
+loop and a test-execution oracle roughly doubled the fix rate.
+
+Not an apples-to-apples comparison — different task count, different hardware, different harness —
+but the mechanism is the point. The raw reports used to ship in `results/legacy/`; they were removed
+from the repo, and `git log --diff-filter=D -- results/legacy` finds the commit that dropped them if
+you want them back.
 
 ## Platform notes
 
