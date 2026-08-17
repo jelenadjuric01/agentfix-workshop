@@ -177,41 +177,6 @@ matters less than it sounds: the Kaggle tier (tier 2) runs on Linux, so the memo
 exactly where the weakest laptops in the room are running — the machines with no cap are, by
 construction, the ones with 16 GB+ of their own RAM to begin with.
 
-### Docker: the flags are tested, the container is not
-
-`DockerBackend.build_argv` is a pure function, so **every isolation flag is asserted by tests that
-need no daemon at all** — `--network none`, `--memory 512m`, `--pids-limit 128`, `--cpus 1`,
-`--user runner`, `--cap-drop ALL`, `--security-opt no-new-privileges`, `--read-only`, the read-only
-`:ro` mount, `--tmpfs /tmp`, and a unique `--name` per run. That matters because these assertions
-used to sit *below* a module-level `pytestmark` skip, so on any machine without Docker (including
-this one and CI) nothing checked that `--network none` was present at all. Deleting it would have
-been green everywhere it mattered.
-
-The mount is read-only on purpose: the filesystem tools write on the **host**, so the container
-needs no write access to the workspace at all. `-p no:cacheprovider` and
-`PYTHONDONTWRITEBYTECODE=1` keep pytest from trying, and `--tmpfs /tmp` with `HOME=/tmp` gives it
-somewhere scratch to go.
-
-On a `subprocess.TimeoutExpired` only the docker *client* is killed — the container keeps running —
-so `run()` names the container and `docker kill`s it by name in the except branch.
-
-**Still unverified: actual container execution.** The five tests that need a live daemon (pass,
-fail, no network, unwritable workspace, timeout leaves nothing behind) skip with the reason
-`agentfix-sandbox:latest not built (docker build -t agentfix-sandbox -f Dockerfile.sandbox .)`.
-The image has never been built on the development machine, for two different reasons at two
-different times: first the Docker VM could not reach the registry to pull `python:3.12-slim`, and as
-of the last check the daemon is not running there at all (`docker info` fails on the socket). So
-nothing here distinguishes "the argv is right" from "the container behaves as the argv promises".
-Build the image and run `uv run pytest tests/test_docker_backend.py -v` on a machine with a working
-daemon before the sandbox-safety demo depends on the runtime behaviour.
-
-**The two backends have to agree on the oracle.** `run_tests` is the agent's only evidence that a
-fix worked, so the pytest running inside the container must be the pytest the host resolves.
-`Dockerfile.sandbox` pins it through `ARG PYTEST_VERSION`, and `tests/test_sandbox_image.py` reads
-that default plus the version in `uv.lock` and fails when they disagree. That test needs no daemon
-and no image, which is the point: the pin had already drifted (image 8.3.2, lock 9.1.1) and the only
-tests that would have noticed were the ones skipping for want of an image.
-
 ## Tests and eval answer different questions
 
 The full suite on the `solutions` branch is 140 tests. **Exactly one talks to a real model.** Five
@@ -265,6 +230,48 @@ What this split catches, and what it does not:
 
 Practically: `uv run pytest` is offline and always safe, `uv run pytest --all` adds the live test
 (`conftest.py`), `uv run pytest -m llm` runs only it, and `uv run agentfix eval` is the measurement.
+
+## Docker: the flags are tested without a daemon, the container with one
+
+`DockerBackend.build_argv` is a pure function, so **every isolation flag is asserted by tests that
+need no daemon at all** — `--network none`, `--memory 512m`, `--pids-limit 128`, `--cpus 1`,
+`--user runner`, `--cap-drop ALL`, `--security-opt no-new-privileges`, `--read-only`, the read-only
+`:ro` mount, `--tmpfs /tmp`, and a unique `--name` per run. That matters because these assertions
+used to sit *below* a module-level `pytestmark` skip, so on any machine without Docker (including
+this one and CI) nothing checked that `--network none` was present at all. Deleting it would have
+been green everywhere it mattered.
+
+The mount is read-only on purpose: the filesystem tools write on the **host**, so the container
+needs no write access to the workspace at all. `-p no:cacheprovider` and
+`PYTHONDONTWRITEBYTECODE=1` keep pytest from trying, and `--tmpfs /tmp` with `HOME=/tmp` gives it
+somewhere scratch to go.
+
+On a `subprocess.TimeoutExpired` only the docker *client* is killed — the container keeps running —
+so `run()` names the container and `docker kill`s it by name in the except branch.
+
+**Container execution is now verified.** With the image built
+(`docker build -t agentfix-sandbox -f Dockerfile.sandbox .`, ~235 MB on disk, 51 MB of content), the
+whole file runs: **20 passed**, no skips. That includes the five that need a live daemon, and they are
+the ones that check behaviour rather than argv — passing tests report passed, failing report failed,
+the network really is unreachable from inside, the workspace really cannot be written, and a hanging
+test times out leaving no container behind. Until this ran, nothing distinguished "the argv is right"
+from "the container does what the argv promises"; now both are covered, by different tests, with only
+the second needing Docker.
+
+The five still skip on a machine without a daemon or without the image, with the build command as the
+skip reason. That is the intended behaviour: the flag assertions above keep working, so a missing
+daemon costs you the runtime proof and nothing else.
+
+**The two backends have to agree on the oracle.** `run_tests` is the agent's only evidence that a
+fix worked, so the pytest running inside the container must be the pytest the host resolves.
+`Dockerfile.sandbox` pins it through `ARG PYTEST_VERSION`, and `tests/test_sandbox_image.py` reads
+that default plus the version in `uv.lock` and fails when they disagree. That test needs no daemon
+and no image, which is the point: the pin had already drifted (image 8.3.2, lock 9.1.1) and the only
+tests that would have noticed were the ones skipping for want of an image. Confirmed from inside the
+built image: `docker run --rm --network none agentfix-sandbox python -m pytest --version` reports
+**pytest 9.1.1**, matching the host. The interpreter is `python:3.12-slim`'s own — 3.12.14 against the
+host's 3.12.9 — which is close enough that the oracle agrees, and something to keep an eye on if a
+task ever depends on patch-level behaviour.
 
 ## HumanEvalFix runs as a plain script, not pytest
 
