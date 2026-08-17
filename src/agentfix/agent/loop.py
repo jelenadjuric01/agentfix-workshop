@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from agentfix.agent.trace import Tracer, TraceEvent
@@ -94,7 +93,6 @@ def _guarded(call: ToolCall, step: int, hits: int) -> tuple[dict[str, Any], Trac
 
 def run_agent(
     task: Task,
-    work_dir: Path,
     llm: LLMClient,
     registry: ToolRegistry,
     run_tests: RunTestsTool,

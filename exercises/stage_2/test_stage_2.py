@@ -33,7 +33,7 @@ def test_tool_result_is_appended_as_a_tool_message():
         llm = FakeLLMClient(
             [assistant_tool_call("list_files", {}, call_id="c1"), assistant_text("ok")]
         )
-        run_agent(task, work_dir, llm, registry, run_tests, max_steps=2)
+        run_agent(task, llm, registry, run_tests, max_steps=2)
 
     observation = llm.calls[1][-1]
     assert observation["role"] == "tool", "the observation must go back as a tool message"
@@ -48,7 +48,7 @@ def test_tool_call_id_is_carried_back():
         llm = FakeLLMClient(
             [assistant_tool_call("list_files", {}, call_id="xyz789"), assistant_text("ok")]
         )
-        run_agent(task, work_dir, llm, registry, run_tests, max_steps=2)
+        run_agent(task, llm, registry, run_tests, max_steps=2)
 
     assert llm.calls[1][-1].get("tool_call_id") == "xyz789"
 
@@ -60,7 +60,7 @@ def test_history_is_append_only():
         llm = FakeLLMClient(
             [assistant_tool_call("list_files", {}, call_id="c1"), assistant_text("ok")]
         )
-        run_agent(task, work_dir, llm, registry, run_tests, max_steps=2)
+        run_agent(task, llm, registry, run_tests, max_steps=2)
 
     first, second = llm.calls
     assert (
@@ -80,6 +80,6 @@ def test_the_loop_keeps_going_after_a_tool_call():
                 assistant_text("done"),
             ]
         )
-        result = run_agent(task, work_dir, llm, registry, run_tests, max_steps=3)
+        result = run_agent(task, llm, registry, run_tests, max_steps=3)
 
     assert result.steps_used == 3

@@ -53,7 +53,7 @@ def test_not_done_when_the_model_only_claims_success():
                 assistant_text("DONE. I have fixed the bug. All tests pass now."),
             ]
         )
-        result = run_agent(task, work_dir, llm, registry, run_tests, max_steps=2)
+        result = run_agent(task, llm, registry, run_tests, max_steps=2)
 
     assert result.solved is False
 
@@ -71,6 +71,6 @@ def test_done_only_once_the_tests_actually_pass():
                 assistant_text("fixed"),
             ]
         )
-        result = run_agent(task, work_dir, llm, registry, run_tests)
+        result = run_agent(task, llm, registry, run_tests)
 
     assert result.solved is True

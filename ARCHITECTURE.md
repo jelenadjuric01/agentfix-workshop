@@ -8,7 +8,9 @@ point of the workshop is that a coding agent fits in something you can read end 
 `src/agentfix/agent/loop.py`, `run_agent`:
 
 ```python
-def run_agent(task, work_dir, llm, registry, run_tests, max_steps=MAX_STEPS, tracer=None):
+def run_agent(task, llm, registry, run_tests, max_steps=MAX_STEPS, tracer=None):
+    # ^ no work_dir: every tool was constructed with the workspace already bound, so the loop
+    # itself never touches a path. It does not even import pathlib.
     tracer = tracer or Tracer()
     messages = [
         {"role": "system", "content": system_prompt(registry)},

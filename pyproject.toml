@@ -29,7 +29,15 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F"]
+# ARG (unused arguments) catches dead parameters like the `work_dir` run_agent used to take
+# and never read. It is scoped to src/ below: in tests, an unused argument is usually correct,
+# because a fake has to match the signature of the thing it stands in for.
+select = ["E4", "E7", "E9", "F", "ARG"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG"]
+"exercises/*" = ["ARG"]
+"conftest.py" = ["ARG"]
 
 [tool.mypy]
 files = ["src/agentfix"]

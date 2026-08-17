@@ -46,8 +46,12 @@ class FakeLLMClient:
         self.calls: list[list[dict[str, Any]]] = []
 
     def chat(
-        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,  # noqa: ARG002
     ) -> LLMReply:
+        # `tools` is ignored on purpose: the replies are scripted, so nothing here inspects the
+        # schemas. The parameter stays because it is part of the LLMClient protocol.
         assert self._index < len(self._replies), (
             f"FakeLLMClient script exhausted after {self._index} call(s); "
             "the agent asked for more turns than the test scripted"

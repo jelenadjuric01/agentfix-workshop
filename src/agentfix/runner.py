@@ -37,5 +37,5 @@ def solve_task(
             ]
         )
         return run_agent(
-            task, work_dir, llm, registry, run_tests, max_steps=max_steps, tracer=Tracer(verbose)
+            task, llm, registry, run_tests, max_steps=max_steps, tracer=Tracer(verbose)
         )
