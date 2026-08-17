@@ -16,6 +16,9 @@ def test_tool_declares_a_valid_schema():
     assert tool.name == "run_tests"
     assert tool.description, "the model chooses tools by their description — keep it"
     assert tool.parameters["type"] == "object"
+    # "no arguments" is an EMPTY properties object, not a missing one. A schema without
+    # `properties` is incomplete JSON Schema, and dispatch reads `parameters` too.
+    assert tool.parameters["properties"] == {}
 
 
 def test_schema_is_exported_to_the_model():
@@ -39,6 +42,25 @@ def test_running_passing_tests_reports_success(tmp_path):
     tool = RunTestsTool(tmp_path, PYTEST_CMD, SubprocessBackend())
     tool.run()
     assert tool.last_result.passed is True
+
+
+def test_the_observation_tells_the_model_what_actually_happened(tmp_path):
+    """`ToolResult.content` is everything the model learns from the run — so it must say.
+
+    Storing `last_result` is enough to satisfy `is_done`, but the model never sees that
+    attribute. It sees only this string. Return an empty or verdict-free one and the agent is
+    blind: it knows a tool ran and nothing about what it found.
+    """
+    (tmp_path / "test_x.py").write_text("def test_x():\n    assert 1 == 2\n", encoding="utf-8")
+    failing = RunTestsTool(tmp_path, PYTEST_CMD, SubprocessBackend()).run()
+
+    assert "fail" in failing.content.lower(), "say that the tests failed"
+    assert "test_x" in failing.content, "pass the real pytest output through — not just a verdict"
+
+    (tmp_path / "test_x.py").write_text("def test_x():\n    assert True\n", encoding="utf-8")
+    passing = RunTestsTool(tmp_path, PYTEST_CMD, SubprocessBackend()).run()
+
+    assert "pass" in passing.content.lower(), "say that the tests passed"
 
 
 def test_the_model_chooses_this_tool_when_told_tests_fail():

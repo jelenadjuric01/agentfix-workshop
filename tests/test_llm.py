@@ -2,7 +2,12 @@ import pytest
 
 from agentfix.config import BASE_MODEL, LLMConfig
 from agentfix.llm.client import OllamaClient
-from agentfix.llm.fake import FakeLLMClient, assistant_text, assistant_tool_call
+from agentfix.llm.fake import (
+    FakeLLMClient,
+    assistant_text,
+    assistant_tool_call,
+    assistant_tool_calls,
+)
 from agentfix.llm.types import INVALID_ARGUMENTS, ToolCall
 
 
@@ -83,6 +88,24 @@ def test_assistant_tool_call_builds_openai_shaped_message():
     assert reply.tool_calls == (ToolCall(id="abc", name="run_tests", arguments={}),)
     assert reply.message["tool_calls"][0]["function"]["name"] == "run_tests"
     assert reply.message["tool_calls"][0]["id"] == "abc"
+
+
+def test_assistant_tool_calls_builds_one_message_carrying_several_calls():
+    reply = assistant_tool_calls([("run_tests", {}), ("read_file", {"path": "a.py"})])
+
+    assert [call.name for call in reply.tool_calls] == ["run_tests", "read_file"]
+    assert [call.id for call in reply.tool_calls] == ["call_1", "call_2"]
+    # The wire format holds both calls in a single assistant message, arguments as JSON text.
+    wire = reply.message["tool_calls"]
+    assert len(wire) == 2
+    assert wire[1]["function"]["arguments"] == '{"path": "a.py"}'
+
+
+def test_assistant_tool_calls_rejects_mismatched_or_duplicate_ids():
+    with pytest.raises(AssertionError, match="one call id per call"):
+        assistant_tool_calls([("run_tests", {}), ("list_files", {})], call_ids=("only_one",))
+    with pytest.raises(AssertionError, match="distinct"):
+        assistant_tool_calls([("run_tests", {}), ("list_files", {})], call_ids=("same", "same"))
 
 
 def test_fake_client_returns_scripted_replies_in_order_and_records_calls():

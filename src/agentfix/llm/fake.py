@@ -22,6 +22,7 @@ replaces only the model — never the tools, the sandbox, or the loop.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from typing import Any
 
 from agentfix.llm.types import LLMReply, ToolCall
@@ -49,6 +50,35 @@ def assistant_tool_call(
     faithful here is what makes the tests meaningful: the loop appends the raw message to the
     history, so if this shape were wrong the tests would pass against a fiction.
     """
+    return assistant_tool_calls(
+        [(name, arguments)], call_ids=(call_id,), prompt_tokens=prompt_tokens
+    )
+
+
+def assistant_tool_calls(
+    calls: Sequence[tuple[str, dict[str, Any]]],
+    call_ids: Sequence[str] | None = None,
+    prompt_tokens: int = 10,
+) -> LLMReply:
+    """A reply requesting SEVERAL tool calls in one turn, which a real model is allowed to do.
+
+    The API permits any number of calls per assistant message, and requires an answer to
+    every one of them: skip a `tool_call_id` and the next request is rejected. The loop
+    therefore iterates over `reply.tool_calls` — and without this builder there was no way to
+    exercise that iteration with more than one element, so a loop answering only the first
+    call would have passed every test in the suite.
+
+        assistant_tool_calls([("run_tests", {}), ("list_files", {})], call_ids=("c1", "c2"))
+
+    `call_ids` defaults to call_1..call_N. Ids must be distinct, since the whole point of an
+    id is to tell two calls apart.
+    """
+    if call_ids is None:
+        call_ids = [f"call_{index}" for index in range(1, len(calls) + 1)]
+    ids = tuple(call_ids)
+    assert len(ids) == len(calls), "one call id per call"
+    assert len(set(ids)) == len(ids), "call ids must be distinct"
+
     message = {
         "role": "assistant",
         "content": "",
@@ -58,13 +88,17 @@ def assistant_tool_call(
                 "type": "function",
                 "function": {"name": name, "arguments": json.dumps(arguments)},
             }
+            for call_id, (name, arguments) in zip(ids, calls, strict=True)
         ],
     }
     return LLMReply(
         message=message,
-        tool_calls=(ToolCall(id=call_id, name=name, arguments=arguments),),
+        tool_calls=tuple(
+            ToolCall(id=call_id, name=name, arguments=arguments)
+            for call_id, (name, arguments) in zip(ids, calls, strict=True)
+        ),
         prompt_tokens=prompt_tokens,
-        completion_tokens=5,
+        completion_tokens=5 * len(calls),
     )
 
 

@@ -3,7 +3,12 @@ from pathlib import Path
 
 from agentfix.agent.loop import AgentResult, is_done, run_agent
 from agentfix.agent.trace import Tracer
-from agentfix.llm.fake import FakeLLMClient, assistant_text, assistant_tool_call
+from agentfix.llm.fake import (
+    FakeLLMClient,
+    assistant_text,
+    assistant_tool_call,
+    assistant_tool_calls,
+)
 from agentfix.sandbox.subprocess_backend import SubprocessBackend
 from agentfix.tasks.loader import load_task, workspace
 from agentfix.tools.base import ToolRegistry
@@ -153,6 +158,39 @@ def test_a_text_only_reply_does_not_end_the_run_while_the_tests_still_fail():
     nudge = llm.calls[2][-1]
     assert nudge["role"] == "user"
     assert "have not passed" in nudge["content"]
+
+
+def test_every_call_in_a_multi_call_turn_gets_its_own_observation():
+    """One assistant turn may carry several calls, and every one needs an answer.
+
+    The API rejects the next request if any `tool_call_id` from the previous assistant message
+    went unanswered, so a loop that dispatched only `reply.tool_calls[0]` would work against
+    this fake and fail against a real model on the first multi-call turn.
+    """
+    task = load_task(FIXTURE)
+    with workspace(task) as work_dir:
+        registry, run_tests = _build(work_dir, task)
+        llm = FakeLLMClient(
+            [
+                assistant_tool_calls(
+                    [("run_tests", {}), ("list_files", {})], call_ids=("c1", "c2")
+                ),
+                assistant_text("now I know what is broken and what exists"),
+            ]
+        )
+        tracer = Tracer()
+
+        run_agent(task, llm, registry, run_tests, max_steps=2, tracer=tracer)
+
+    observations = [message for message in llm.calls[1] if message.get("role") == "tool"]
+    assert [message["tool_call_id"] for message in observations] == ["c1", "c2"]
+    assert [message["name"] for message in observations] == ["run_tests", "list_files"]
+    # Both really executed: the failure output and the file listing are both present.
+    assert "Tests failed" in observations[0]["content"]
+    assert "shopcart/cart.py" in observations[1]["content"]
+    # And both are visible in the trace, under the one step that made them.
+    tool_events = [event for event in tracer.events if event.kind == "tool"]
+    assert [event.step for event in tool_events] == [1, 1]
 
 
 def test_repeated_identical_calls_abandon_the_run():

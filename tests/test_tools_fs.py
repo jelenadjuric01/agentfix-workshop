@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 
 from agentfix.tools.fs import (
@@ -5,6 +7,7 @@ from agentfix.tools.fs import (
     PathEscapeError,
     ReadFileTool,
     WriteFileTool,
+    is_test_path,
     resolve_in_root,
 )
 
@@ -19,8 +22,13 @@ def repo(tmp_path):
     (tmp_path / "tests" / "test_calc.py").write_text(
         "def test_add():\n    pass\n", encoding="utf-8"
     )
+    # A .py file, not a .pyc: `rglob("*.py")` never matches a .pyc, so a .pyc fixture would
+    # pass whether or not IGNORED_DIRS is applied at all. The directories that actually matter
+    # are the ones full of real .py files — a stray .venv inside a task repo above all.
     (tmp_path / "__pycache__").mkdir()
-    (tmp_path / "__pycache__" / "junk.pyc").write_text("x", encoding="utf-8")
+    (tmp_path / "__pycache__" / "junk.py").write_text("junk = 1\n", encoding="utf-8")
+    (tmp_path / ".venv" / "lib").mkdir(parents=True)
+    (tmp_path / ".venv" / "lib" / "vendored.py").write_text("x = 1\n", encoding="utf-8")
     return tmp_path
 
 
@@ -34,12 +42,62 @@ def test_resolve_in_root_rejects_escapes(repo, bad):
         resolve_in_root(repo, bad)
 
 
-def test_list_files_lists_sources_and_hides_pycache(repo):
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="creating a symlink needs elevated rights on Windows"
+)
+def test_resolve_in_root_rejects_a_symlink_that_points_outside(repo, tmp_path_factory):
+    """The reason `resolve_in_root` calls `.resolve()` rather than comparing strings.
+
+    Every case above is textual — `..` and an absolute path — and a prefix check on the raw
+    string would catch them. A symlink is the case that needs the filesystem: the path is
+    entirely inside the root right up until it is followed.
+    """
+    outside = tmp_path_factory.mktemp("outside") / "secret.py"
+    outside.write_text("SECRET = 1\n", encoding="utf-8")
+    (repo / "innocent.py").symlink_to(outside)
+
+    with pytest.raises(PathEscapeError):
+        resolve_in_root(repo, "innocent.py")
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="creating a symlink needs elevated rights on Windows"
+)
+def test_the_file_tools_refuse_a_symlink_that_points_outside(repo, tmp_path_factory):
+    """And the refusal reaches the model as an observation, not as a leaked file."""
+    outside = tmp_path_factory.mktemp("outside") / "secret.py"
+    outside.write_text("SECRET = 1\n", encoding="utf-8")
+    (repo / "innocent.py").symlink_to(outside)
+
+    read = ReadFileTool(repo).run(path="innocent.py")
+    assert read.ok is False
+    assert "SECRET" not in read.content
+
+    written = WriteFileTool(repo).run(path="innocent.py", content="x = 2\n")
+    assert written.ok is False
+    assert outside.read_text(encoding="utf-8") == "SECRET = 1\n", "the target must be untouched"
+
+
+def test_list_files_lists_sources_and_hides_ignored_directories(repo):
     result = ListFilesTool(repo).run()
     assert result.ok is True
     assert "src/calc.py" in result.content
     assert "tests/test_calc.py" in result.content
+    # Every byte listed here is a byte the model re-reads on every later turn.
     assert "__pycache__" not in result.content
+    assert ".venv" not in result.content
+
+
+def test_is_test_path_says_no_for_a_path_outside_the_root(repo, tmp_path_factory):
+    """`resolve_in_root` has already refused these, so the answer is "not a test file"."""
+    elsewhere = tmp_path_factory.mktemp("elsewhere") / "tests" / "test_other.py"
+    assert is_test_path(repo, elsewhere) is False
+
+
+def test_list_files_reports_an_empty_project_as_an_observation(tmp_path):
+    result = ListFilesTool(tmp_path).run()
+    assert result.ok is True
+    assert "no Python files" in result.content
 
 
 def test_read_file_returns_contents(repo):
