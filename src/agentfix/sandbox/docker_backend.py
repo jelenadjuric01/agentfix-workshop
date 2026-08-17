@@ -1,3 +1,14 @@
+"""The opt-in backend: real isolation, one throwaway container per test run.
+
+Enabled with AGENTFIX_SANDBOX=docker, after building the image:
+
+    docker build -t agentfix-sandbox -f Dockerfile.sandbox .
+
+`build_argv` is a separate method from `run` so the command line can be asserted without a
+Docker daemon present — most of the tests for this file check the flags rather than starting
+containers, which is what keeps them runnable everywhere.
+"""
+
 from __future__ import annotations
 
 import subprocess
@@ -21,6 +32,7 @@ class DockerBackend:
     def build_argv(
         self, workspace: Path, command: tuple[str, ...], name: str | None = None
     ) -> list[str]:
+        """The full `docker run` command line. Every flag here is asserted by a test."""
         # command[0] is the *host* interpreter path, which means nothing in the container.
         inner = ("python", *command[1:])
         if "pytest" in inner:
@@ -30,11 +42,11 @@ class DockerBackend:
         return [
             "docker",
             "run",
-            "--rm",
+            "--rm",  # delete the container when it exits; no state survives a run
             "--name",
-            name or self._container_name(),
+            name or self._container_name(),  # a known name, so a timeout can kill it
             "--network",
-            "none",
+            "none",  # no network at all: the real difference from the subprocess backend
             "--memory",
             "512m",
             "--pids-limit",
@@ -42,16 +54,16 @@ class DockerBackend:
             "--cpus",
             "1",
             "--user",
-            "runner",
+            "runner",  # not root, even inside the container
             "--cap-drop",
-            "ALL",
+            "ALL",  # drop every Linux capability
             "--security-opt",
-            "no-new-privileges",
-            "--read-only",
+            "no-new-privileges",  # and block regaining any via setuid binaries
+            "--read-only",  # the container's own filesystem is immutable
             "--tmpfs",
-            "/tmp",
+            "/tmp",  # except /tmp, in memory, discarded with the container
             "--env",
-            "HOME=/tmp",
+            "HOME=/tmp",  # so anything writing a dotfile has somewhere to put it
             "--env",
             "PYTHONDONTWRITEBYTECODE=1",
             "--volume",
@@ -65,9 +77,12 @@ class DockerBackend:
 
     @staticmethod
     def _container_name() -> str:
+        """A unique name per run, so concurrent runs cannot collide or kill each other."""
         return f"agentfix-{uuid.uuid4().hex[:12]}"
 
     def run(self, workspace: Path, command: tuple[str, ...], timeout_s: int = 10) -> ExecResult:
+        # Generated here rather than inside build_argv so the same name is available below for
+        # `docker kill`.
         name = self._container_name()
         argv = self.build_argv(workspace, command, name=name)
         start = time.time()
@@ -78,6 +93,8 @@ class DockerBackend:
                 capture_output=True,
                 text=True,
                 errors="replace",
+                # A grace margin over the caller's timeout: pulling and starting a container
+                # costs time that is not the test's fault.
                 timeout=timeout_s + 10,
             )
         except subprocess.TimeoutExpired:
@@ -91,4 +108,7 @@ class DockerBackend:
         if len(combined) > self.max_output_chars:
             combined = combined[: self.max_output_chars] + TRUNCATION_MARKER
 
+        # Note this is the *docker CLI's* exit code, which passes through the container's. A
+        # missing image therefore surfaces as a failed test run with docker's error in the
+        # output, rather than as an exception.
         return ExecResult(completed.returncode == 0, combined, round(time.time() - start, 3))

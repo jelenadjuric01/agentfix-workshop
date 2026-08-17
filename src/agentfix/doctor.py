@@ -1,3 +1,20 @@
+"""Preflight checks: `agentfix doctor`.
+
+A workshop-specific tool, and the reason is worth understanding. Almost every way this setup
+fails produces a symptom that looks like something else:
+
+  - too small a context window     -> history is silently truncated; looks like a dumb model
+  - the base model, not the derived -> same thing, because num_ctx lives in the Modelfile
+  - Ollama not running             -> a connection error deep inside the SDK
+  - not enough free RAM            -> the model loads, then everything is extremely slow
+
+Each check below turns one of those into a named diagnosis with the command that fixes it.
+Fifteen minutes of a two-hour workshop can disappear into any one of them.
+
+Every check returns a `Check` rather than raising, so one failure never hides the others —
+you get the full picture in one run.
+"""
+
 from __future__ import annotations
 
 import json
@@ -32,6 +49,8 @@ THROUGHPUT_PROMPT = "Count from 1 to 120, one number per line, digits only."
 
 @dataclass(frozen=True)
 class Check:
+    """One check's verdict. `detail` carries the fix, not just the symptom."""
+
     name: str
     ok: bool
     detail: str
@@ -60,7 +79,12 @@ def _capture(command: list[str]) -> str:
 
 
 def _memory_bytes() -> tuple[int | None, int | None]:
-    """(total, free). Either may be None on a platform we cannot read."""
+    """(total, free). Either may be None on a platform we cannot read.
+
+    Hand-rolled per platform rather than pulling in psutil, to keep the dependency list at two
+    packages. Returning None instead of raising matters: a machine whose memory we cannot read
+    is not a machine that fails the check.
+    """
     if sys.platform.startswith("linux"):
         try:
             fields = dict(
@@ -194,6 +218,12 @@ def _check_context(config: LLMConfig) -> Check:
 
 
 def _check_sandbox() -> Check:
+    """Prove the execution backend works by actually running a trivial passing test.
+
+    Checked because `run_tests` is the agent's only oracle: if execution is broken, every run
+    reports NOT SOLVED no matter how good the model is. Uses whichever backend is configured,
+    so it also catches "AGENTFIX_SANDBOX=docker but the image was never built".
+    """
     import tempfile
 
     from agentfix.sandbox.base import get_backend
@@ -205,12 +235,21 @@ def _check_sandbox() -> Check:
 
 
 def run_checks() -> list[Check]:
+    """Run the checks, skipping those whose prerequisites already failed.
+
+    The nesting is deliberate: asking the model to generate when the server is unreachable
+    would report a second, derived failure and bury the real one. Each check runs only when the
+    thing it depends on passed. The sandbox check is outside that chain because it needs no
+    model at all.
+    """
     config = LLMConfig.from_env()
     checks = [_check_python(), _check_ram(), _check_ollama_installed(), _check_server(config)]
 
-    if checks[-1].ok:
+    if checks[-1].ok:  # server reachable
         checks.append(_check_model_present(config))
-        if checks[-1].ok:
+        if checks[-1].ok:  # model present
+            # Generation must run before the context check: /api/ps can only report the context
+            # length of a model that is currently loaded, and generating is what loads it.
             checks.append(_check_generation(config))
             checks.append(_check_context(config))
 
@@ -219,6 +258,7 @@ def run_checks() -> list[Check]:
 
 
 def report(checks: list[Check]) -> int:
+    """Print every check, then a single verdict line. Returns a process exit code."""
     for check in checks:
         mark = "PASS" if check.ok else "FAIL"
         print(f"[{mark}] {check.name}: {check.detail}")
