@@ -7,5 +7,6 @@ __pycache__/
 *.egg-info/
 dist/
 htmlcov/
+.DS_Store
 results/*.json
 docs/superpowers
