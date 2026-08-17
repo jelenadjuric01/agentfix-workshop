@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from agentfix.sandbox.base import ExecResult, ExecutionBackend
 from agentfix.tools.base import ToolResult
@@ -10,7 +11,7 @@ class RunTestsTool:
     name = "run_tests"
     description = "Run the project's test suite and return the result. This is the source of truth."
     # TODO(stage-1): the JSON Schema the model sees. run_tests needs no arguments.
-    parameters: dict = {}
+    parameters: dict[str, Any] = {}
 
     def __init__(
         self,
