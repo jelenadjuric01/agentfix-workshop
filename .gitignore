@@ -8,5 +8,6 @@ __pycache__/
 dist/
 htmlcov/
 .DS_Store
+.idea/
 results/*.json
 docs/superpowers
