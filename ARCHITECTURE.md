@@ -212,6 +212,60 @@ that default plus the version in `uv.lock` and fails when they disagree. That te
 and no image, which is the point: the pin had already drifted (image 8.3.2, lock 9.1.1) and the only
 tests that would have noticed were the ones skipping for want of an image.
 
+## Tests and eval answer different questions
+
+The full suite on the `solutions` branch is 140 tests. **Exactly one talks to a real model.** Five
+more skip unless you build the Docker image, and the remaining 134 run anywhere, offline, with
+nothing installed but this project. That is on purpose, and the reason is worth saying plainly: a
+test should fail only when someone breaks something. A model is
+allowed to give a different answer to the same question twice, so a test that calls one fails
+sometimes for no reason — and a suite that goes red at random teaches people to stop reading red.
+
+So the model gets pulled out of the way. `LLMClient` is a one-method Protocol, `run_agent` takes one
+as an argument, and `FakeLLMClient` (`llm/fake.py`) is a list of replies handed out in order. With a
+scripted model, the rest of the agent becomes an ordinary program: the same input has to produce the
+same output every time. The tools are still real — `run_tests` really runs pytest in the sandbox,
+`read_file` really reads the file — so only the decisions are fake, never the consequences.
+
+Three layers, three questions:
+
+| Layer | Question | What it uses | Count |
+|---|---|---|---|
+| loop and tools | is the machinery correct? | `FakeLLMClient`, real tools | 127 |
+| `OllamaClient` | do we speak the API correctly? | fake OpenAI SDK response objects, no network | 12 (`tests/test_llm.py`) |
+| live smoke test | is a real model reachable and parsed? | a running Ollama | 1 (`@pytest.mark.llm`) |
+
+The middle layer is not a scripted agent — it builds fake SDK objects and replaces
+`client._client.chat.completions.create`, so it checks the wire format: tool-call arguments arrive
+as a JSON *string* and must become a dict, broken JSON must survive as `INVALID_ARGUMENTS` so the
+model is told its JSON was bad rather than that an argument was missing, and `usage` must land in
+`prompt_tokens`/`completion_tokens`.
+
+A scripted model also buys the tests something a real one cannot give them: a model that **lies on
+command**. `assistant_text("DONE. I have fixed the bug.")` while the tests are red is how
+`exercises/stage_3` proves `is_done` does not take the model's word. You cannot ask Mellum2 to lie
+reliably, and this is the single most important rule in the codebase.
+
+**What is not a test: whether the model is any good at fixing bugs.** That is a measurement, so it
+is `agentfix eval`, and the numbers are recorded in `results/precomputed/` rather than asserted:
+1.00 (3/3) on the workshop suite, 0.60 (12/20) on HumanEvalFix. It cannot live in pytest for two
+reasons — it takes 8m09s and 185,235 tokens, and the answer legitimately moves between runs. The
+value of keeping it as a measurement is on the record: pass@1 went 0.50 → 0.60 when the stop
+condition stopped being decorative, and the eval is what showed that. No unit test would have.
+
+What this split catches, and what it does not:
+
+- Tests catch a broken loop, a dropped `tool_call_id`, an `is_done` that trusts the model, a tool
+  that escapes its root, a sandbox with no caps, an image pinning the wrong pytest.
+- Nothing in the suite catches Ollama changing `/v1` behaviour, a model update making the prompt
+  land worse, a tool description the model misreads, or a context setting that quietly truncates
+  history. Those are facts about *your machine and your model*, which is what `agentfix doctor` is
+  for: it checks them when you care and prints the numbers, instead of pretending a green suite
+  proved them.
+
+Practically: `uv run pytest` is offline and always safe, `uv run pytest --all` adds the live test
+(`conftest.py`), `uv run pytest -m llm` runs only it, and `uv run agentfix eval` is the measurement.
+
 ## HumanEvalFix runs as a plain script, not pytest
 
 The workshop tasks (`tasks/workshop/*`) run via `pytest`. HumanEvalFix tasks do not: each vendored
