@@ -331,8 +331,11 @@ See the first bullet below for its verification status.
   memory/pid/cpu caps, `--read-only`, `--cap-drop ALL`, …) is now asserted by tests that run
   without a daemon, so the argv cannot silently regress. But the five tests that actually start a
   container skip until you build the image: `docker build -t agentfix-sandbox -f Dockerfile.sandbox .`
-  The development machine's Docker VM could not reach the registry, so that build never completed
-  here. Run it before the safety demo depends on the runtime behaviour.
+  That build has never completed on the machine this repo was written on — its Docker VM could not
+  reach the registry, and the daemon is not running there now — so no container has ever run these
+  flags. Run it, and check the five tests pass rather than skip, before the safety demo depends on
+  the runtime behaviour. The image's pytest is pinned to the version in `uv.lock` so both backends
+  verify fixes identically; `tests/test_sandbox_image.py` enforces that without needing a daemon.
 - **The Kaggle notebook has never been run on Kaggle.** `notebooks/kaggle.ipynb` is built from
   commands verified locally, but nobody has executed it end to end in a Kaggle container. Its
   cells now stop with a clear error rather than cloning a placeholder URL, and it clones the

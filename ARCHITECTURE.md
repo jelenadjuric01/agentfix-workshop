@@ -197,11 +197,20 @@ so `run()` names the container and `docker kill`s it by name in the except branc
 
 **Still unverified: actual container execution.** The five tests that need a live daemon (pass,
 fail, no network, unwritable workspace, timeout leaves nothing behind) skip with the reason
-`agentfix-sandbox:latest not built (docker build -f Dockerfile.sandbox .)`. On the development
-machine the daemon does now run, but its VM cannot reach the Docker registry, so `python:3.12-slim`
-could not be pulled and the image could not be built. Build the image and run
-`uv run pytest tests/test_docker_backend.py -v` on a machine with registry access before the
-sandbox-safety demo depends on the runtime behaviour.
+`agentfix-sandbox:latest not built (docker build -t agentfix-sandbox -f Dockerfile.sandbox .)`.
+The image has never been built on the development machine, for two different reasons at two
+different times: first the Docker VM could not reach the registry to pull `python:3.12-slim`, and as
+of the last check the daemon is not running there at all (`docker info` fails on the socket). So
+nothing here distinguishes "the argv is right" from "the container behaves as the argv promises".
+Build the image and run `uv run pytest tests/test_docker_backend.py -v` on a machine with a working
+daemon before the sandbox-safety demo depends on the runtime behaviour.
+
+**The two backends have to agree on the oracle.** `run_tests` is the agent's only evidence that a
+fix worked, so the pytest running inside the container must be the pytest the host resolves.
+`Dockerfile.sandbox` pins it through `ARG PYTEST_VERSION`, and `tests/test_sandbox_image.py` reads
+that default plus the version in `uv.lock` and fails when they disagree. That test needs no daemon
+and no image, which is the point: the pin had already drifted (image 8.3.2, lock 9.1.1) and the only
+tests that would have noticed were the ones skipping for want of an image.
 
 ## HumanEvalFix runs as a plain script, not pytest
 
