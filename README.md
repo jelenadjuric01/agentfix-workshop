@@ -268,6 +268,82 @@ Working through the exercises yourself? Start at `exercises/README.md` — it la
 stages, which file you edit for each, and the `git checkout stage-N-solution` escape hatch if you
 fall behind.
 
+## Adding your own task
+
+The three workshop fixtures are deliberately tiny. Once the agent solves them, the most useful
+thing you can do is point it at a bug of your own — that is where you find out what a 12B model can
+and cannot do.
+
+A task is a directory with exactly two things in it: a `task.json` and a `repo/` folder holding a
+self-contained project.
+
+```
+tasks/workshop/01-shopcart/
+├── task.json                  # metadata: what to run, what should fail
+└── repo/                      # the buggy project, copied fresh into a tempdir per run
+    ├── shopcart/
+    │   ├── __init__.py
+    │   ├── cart.py            # ← the bug lives here
+    │   └── pricing.py
+    └── tests/
+        └── test_cart.py       # ← the specification; the agent may not edit this
+```
+
+`repo/` is the agent's whole world. Nothing outside it is visible, and nothing inside it is
+imported by the workshop itself — so it needs its own `__init__.py` files and its own tests, and it
+must run with no dependencies beyond pytest and the standard library. The agent never touches your
+copy: `workspace()` copies `repo/` into a temp dir per run and deletes it afterwards.
+
+`task.json` has four fields, all optional except in practice you want all four:
+
+```json
+{
+  "task_id": "04-mytask",
+  "test_command": ["-m", "pytest", "-q"],
+  "expected_failures": ["test_the_one_that_is_red"],
+  "prompt": "The test suite for this project is failing. Find the bug and fix it."
+}
+```
+
+- **`task_id`** — label used in output and the temp-dir name. Defaults to the directory name.
+- **`test_command`** — run from inside `repo/`. A leading `-` flag gets `sys.executable` prepended,
+  so `["-m", "pytest", "-q"]` becomes `python -m pytest -q`.
+- **`expected_failures`** — the test *function* names that must be red before the agent starts.
+  Bare names, not `path::name`.
+- **`prompt`** — the first user message. Keep it free of hints; see below.
+
+Three rules that make a task work:
+
+1. **It must start red.** `uv run pytest` inside `repo/` should fail before the agent runs. A task
+   that starts green is solved before it begins.
+2. **The bug goes in the source, never in the tests.** `write_file` refuses any path under `tests/`
+   or named `test_*.py`, because `run_tests` is the agent's only oracle — a bug in the test suite is
+   unfixable by construction.
+3. **Keep files small.** `write_file` takes complete file contents, not a diff, and the model has a
+   4k-token context in the derived Modelfile. A 300-line file the agent has to rewrite in full is a
+   task about context limits, not about debugging. `read_file` truncates at 4,000 characters.
+
+Then run it:
+
+```bash
+uv run agentfix solve tasks/workshop/04-mytask --verbose
+```
+
+`--verbose` prints the trace — every model turn and every tool call — which is the point of trying
+your own task. A `NOT SOLVED` with a readable trace teaches more than a `SOLVED`.
+
+Two things worth knowing:
+
+- **The eval suite globs, but `--limit` defaults to 3.** `agentfix eval --suite workshop` picks up
+  any directory under `tasks/workshop/` containing a `task.json`, sorted by name, then truncates to
+  `--limit`. A fourth task sorts last and is silently cut off, so run
+  `uv run agentfix eval --suite workshop --limit 4` to include it. Adding a task also changes the
+  pass@1 denominator, so it won't be comparable to the measured numbers below.
+- **`tests/test_tasks.py` won't check your task.** Its fixture-validation tests hardcode the
+  original three paths, so your task is neither verified nor broken by them. To have
+  `expected_failures` and the starts-red rule enforced automatically, add your path to the
+  `@pytest.mark.parametrize` lists at `tests/test_tasks.py:44` and `:57`.
+
 ## Measured performance
 
 Measured on an Apple M4, 24 GB, against a local Ollama running
