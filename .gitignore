@@ -9,3 +9,4 @@ dist/
 htmlcov/
 results/*.json
 !results/legacy/
+docs/superpowers
