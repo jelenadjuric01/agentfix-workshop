@@ -1,4 +1,17 @@
+# The sandbox image is deliberately not the project environment: it never installs
+# agentfix. The Docker backend mounts a task's `repo/` read-only at /work and runs
+# `python -m pytest -q` over it, so pytest is the only dependency the container needs.
+# uv has nothing to add here — there is no lockfile inside the mount, and the
+# container runs with --network none on a --read-only filesystem, so a runtime
+# resolve or venv creation could not succeed anyway.
+#
+# PYTEST_VERSION must match the pytest that uv.lock resolves for the host. The two
+# execution backends are the same oracle for the agent's fixes, and an oracle that
+# changes with AGENTFIX_SANDBOX is not one. tests/test_sandbox_image.py fails when
+# this drifts; it needs no daemon, so it catches the drift even though the tests
+# that start a container skip until the image is built.
 FROM python:3.12-slim
-RUN pip install --no-cache-dir pytest==8.3.2 && useradd --create-home runner
+ARG PYTEST_VERSION=9.1.1
+RUN pip install --no-cache-dir pytest==${PYTEST_VERSION} && useradd --create-home runner
 USER runner
 WORKDIR /work
