@@ -47,7 +47,9 @@ def task_prompt(task: Task) -> str:
     return task.prompt
 
 
-def is_done(run_tests: RunTestsTool) -> bool:
+def is_done(run_tests: RunTestsTool) -> bool:  # noqa: ARG001
+    # The noqa silences "unused argument" only because this stub ignores `run_tests`.
+    # Delete it once your implementation actually reads the parameter.
     # TODO(stage-3): the agent is done when the tests actually pass.
     # Not when the model stops calling tools. Not when it says "DONE".
     return False
