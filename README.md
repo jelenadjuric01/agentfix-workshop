@@ -268,6 +268,176 @@ Working through the exercises yourself? Start at `exercises/README.md` — it la
 stages, which file you edit for each, and the `git checkout stage-N-solution` escape hatch if you
 fall behind.
 
+### Every pytest option you are likely to want
+
+Two settings in `pyproject.toml` change what a bare `uv run pytest` does, so it is worth knowing
+they are there:
+
+```toml
+testpaths = ["tests", "exercises"]   # what gets collected when you name no path
+addopts   = "-m 'not llm'"           # silently prepended to EVERY invocation
+```
+
+`addopts` means `uv run pytest` is really `uv run pytest -m 'not llm'`, even though nothing on
+your command line says so. And `testpaths` **differs by branch**: on `main` (the exercise branch)
+it is `["exercises"]` only, because the full `tests/` suite would fail against the unimplemented
+stubs; on `solutions` it is both directories. So the same command collects 12 tests on one branch
+and 140 on the other.
+
+**Project-specific — these exist only because this repo added them:**
+
+| Command | What it does |
+|---|---|
+| `uv run pytest` | everything that needs no model (140 collected, 1 deselected on `solutions`) |
+| `uv run pytest --all` | adds the one test that needs a running Ollama |
+| `uv run pytest -m llm` | *only* that test — useful for checking your model setup alone |
+| `uv run pytest --all -m llm` | deliberate usage error: `--all cannot be combined with -m 'llm'` |
+
+`--all` is defined in `conftest.py` at the repo root, which pytest auto-loads. It works by
+clearing the marker filter that `addopts` injected. The alternative incantation is
+`-m "llm or not llm"`, which is accurate, unmemorable, and looks like a typo.
+
+**Choosing what runs:**
+
+| Command | What it does |
+|---|---|
+| `uv run pytest tests/test_loop.py` | one file |
+| `uv run pytest tests/test_loop.py::test_step_budget_is_a_hard_cap` | one test, by node id |
+| `uv run pytest exercises/stage_1` | one directory — how you work through the exercises |
+| `uv run pytest -k "guard or dispatch"` | any test whose *name* matches the expression |
+| `uv run pytest --lf` | only the tests that failed last run ("last failed") |
+| `uv run pytest --ff` | all of them, but failures first ("failed first") |
+| `uv run pytest -x` | stop at the first failure |
+| `uv run pytest --maxfail=3` | stop after three |
+| `uv run pytest --co -q` | collect and list test ids without running anything |
+
+Naming a path **overrides `testpaths`**, which is how you run `tests/` on `main` even though the
+default there is `exercises/` only.
+
+**Controlling the output:**
+
+| Command | What it does |
+|---|---|
+| `uv run pytest -q` | quiet: one dot per test |
+| `uv run pytest -v` | verbose: one line per test, with its name |
+| `uv run pytest -s` | do not capture stdout — needed to see `print()` from inside a test |
+| `uv run pytest -rA` | a summary line for every test, not just failures |
+| `uv run pytest --tb=short` | shorter tracebacks (`long`, `short`, `line`, `no`) |
+| `uv run pytest --durations=10` | the ten slowest tests — the Docker ones dominate here |
+
+**Coverage** (`pytest-cov` is in the `dev` extra):
+
+```bash
+uv run pytest --cov=src/agentfix --cov-report=term-missing   # per-file, with unhit line numbers
+uv run pytest --cov=src/agentfix --cov-report=html           # writes htmlcov/index.html
+```
+
+**Debugging a failure:**
+
+| Command | What it does |
+|---|---|
+| `uv run pytest --pdb` | drop into the debugger at the point of failure |
+| `uv run pytest -l` | show local variable values in tracebacks |
+| `uv run pytest --setup-show` | show fixture setup and teardown around each test |
+
+Two of these are worth combining while working: `uv run pytest --lf -x -vv` reruns just what broke,
+stops at the first one, and shows you the full assertion diff.
+
+## Running things in Docker
+
+Everything above runs the tests directly on your machine. The Docker path is different and narrower:
+it swaps out **one thing** — how `run_tests` executes the task's test suite — via the
+`AGENTFIX_SANDBOX` environment variable. The agent itself, the model client, and the file tools
+still run on the host either way. See `src/agentfix/sandbox/` for why the boundary sits there.
+
+### Build the image first
+
+```bash
+docker build -t agentfix-sandbox -f Dockerfile.sandbox .
+```
+
+The trailing `.` is the build context, not punctuation — leaving it off is the usual mistake. The
+image is about 235 MB and pins pytest to the version in `uv.lock`, so both backends verify a fix
+identically.
+
+Check it exists:
+
+```bash
+docker images agentfix-sandbox
+```
+
+### Run the agent with the container sandbox
+
+```bash
+# POSIX shells (macOS, Linux, WSL2) — inline, applies to this one command
+AGENTFIX_SANDBOX=docker uv run agentfix doctor
+AGENTFIX_SANDBOX=docker uv run agentfix solve tasks/workshop/01-shopcart --verbose
+AGENTFIX_SANDBOX=docker uv run agentfix eval --suite workshop --limit 3
+
+# ...or export it once for the whole shell session
+export AGENTFIX_SANDBOX=docker
+uv run agentfix solve tasks/workshop/02-invoice --verbose
+unset AGENTFIX_SANDBOX          # back to the subprocess backend
+```
+
+```powershell
+# Windows PowerShell — its own line, before the command
+$env:AGENTFIX_SANDBOX = 'docker'
+uv run agentfix solve tasks/workshop/01-shopcart --verbose
+Remove-Item Env:\AGENTFIX_SANDBOX
+```
+
+`agentfix doctor` is the quickest confirmation: its `sandbox` check runs a trivial passing test
+through whichever backend is configured, so `[PASS] sandbox: executes tests` with
+`AGENTFIX_SANDBOX=docker` set means the image works. A typo fails loudly rather than quietly
+falling back:
+
+```
+$ AGENTFIX_SANDBOX=podman uv run agentfix doctor
+ValueError: Unknown AGENTFIX_SANDBOX='podman'; expected 'subprocess' or 'docker'
+```
+
+### Run the Docker backend's own tests
+
+```bash
+uv run pytest tests/test_docker_backend.py           # 20 passed with the image built
+uv run pytest tests/test_docker_backend.py -v        # see which are flag checks vs live runs
+uv run pytest tests/test_sandbox_image.py            # pytest-version pin; needs no daemon
+uv run pytest tests/test_docker_backend.py --durations=5
+```
+
+Fifteen of those assert on the generated `docker run` command line and need no daemon at all;
+five actually start containers and skip until the image is built. With it built, all 20 pass —
+including no-network, unwritable-workspace, and timeout-leaves-nothing-behind.
+
+### What the container actually gives you
+
+The default subprocess backend is *hardened* — stripped environment, resource limits, a timeout —
+but it is not isolated: test code runs as your user and can reach your filesystem and the network.
+The container is the real boundary:
+
+| Flag | Effect |
+|---|---|
+| `--network none` | no network at all |
+| `--read-only` + `:ro` mount | nothing inside can be written; the file tools write on the host |
+| `--user runner` | not root, even inside |
+| `--cap-drop ALL`, `--security-opt no-new-privileges` | no Linux capabilities, none regainable |
+| `--memory 512m`, `--pids-limit 128`, `--cpus 1` | hard resource caps |
+| `--rm` | container deleted on exit; nothing survives a run |
+
+Inspect the exact command line without running anything:
+
+```bash
+uv run python -c "
+from pathlib import Path
+from agentfix.sandbox.docker_backend import DockerBackend
+print(' '.join(DockerBackend().build_argv(Path('/tmp/demo'), ('python', '-m', 'pytest', '-q'))))
+"
+```
+
+Containers are started with `--rm`, so nothing to clean up afterwards. If a run is interrupted
+mid-container, `docker ps -a --filter name=agentfix-` will show any stragglers.
+
 ## Adding your own task
 
 The three workshop fixtures are deliberately tiny. Once the agent solves them, the most useful

@@ -7,6 +7,7 @@ __pycache__/
 *.egg-info/
 dist/
 htmlcov/
+.coverage
 .DS_Store
 .idea/
 results/*.json
