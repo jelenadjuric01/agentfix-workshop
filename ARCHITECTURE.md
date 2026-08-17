@@ -181,8 +181,8 @@ construction, the ones with 16 GB+ of their own RAM to begin with.
 
 ## Tests and eval answer different questions
 
-The full suite on the `solutions` branch is 140 tests. **Exactly one talks to a real model.** Five
-more skip unless you build the Docker image, and the remaining 134 run anywhere, offline, with
+The full suite on the `solutions` branch is 150 tests. **Exactly one talks to a real model.** Five
+more skip unless you build the Docker image, and the remaining 144 run anywhere, offline, with
 nothing installed but this project. That is on purpose, and the reason is worth saying plainly: a
 test should fail only when someone breaks something. A model is
 allowed to give a different answer to the same question twice, so a test that calls one fails
@@ -198,8 +198,8 @@ Three layers, three questions:
 
 | Layer | Question | What it uses | Count |
 |---|---|---|---|
-| loop and tools | is the machinery correct? | `FakeLLMClient`, real tools | 127 |
-| `OllamaClient` | do we speak the API correctly? | fake OpenAI SDK response objects, no network | 12 (`tests/test_llm.py`) |
+| loop and tools | is the machinery correct? | `FakeLLMClient`, real tools | 135 |
+| `OllamaClient` | do we speak the API correctly? | fake OpenAI SDK response objects, no network | 14 (`tests/test_llm.py`) |
 | live smoke test | is a real model reachable and parsed? | a running Ollama | 1 (`@pytest.mark.llm`) |
 
 The middle layer is not a scripted agent — it builds fake SDK objects and replaces

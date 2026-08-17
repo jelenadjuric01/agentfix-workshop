@@ -281,14 +281,14 @@ addopts   = "-m 'not llm'"           # silently prepended to EVERY invocation
 `addopts` means `uv run pytest` is really `uv run pytest -m 'not llm'`, even though nothing on
 your command line says so. And `testpaths` **differs by branch**: on `main` (the exercise branch)
 it is `["exercises"]` only, because the full `tests/` suite would fail against the unimplemented
-stubs; on `solutions` it is both directories. So the same command collects 12 tests on one branch
-and 140 on the other.
+stubs; on `solutions` it is both directories. So the same command collects 15 tests on one branch
+and 150 on the other.
 
 **Project-specific — these exist only because this repo added them:**
 
 | Command | What it does |
 |---|---|
-| `uv run pytest` | everything that needs no model (140 collected, 1 deselected on `solutions`) |
+| `uv run pytest` | everything that needs no model (149 collected, 1 deselected on `solutions`) |
 | `uv run pytest --all` | adds the one test that needs a running Ollama |
 | `uv run pytest -m llm` | *only* that test — useful for checking your model setup alone |
 | `uv run pytest --all -m llm` | deliberate usage error: `--all cannot be combined with -m 'llm'` |
