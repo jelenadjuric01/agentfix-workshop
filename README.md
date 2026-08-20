@@ -1,6 +1,6 @@
 # agentfix
 
-A teaching repository for a 90-minute workshop that shows developers new to agents how a coding
+A teaching repository for a workshop that shows developers new to agents how a coding
 agent actually works, by having them build one. You write three pieces of a real agent yourself —
 a tool and its JSON schema, the loop's tool dispatch, and a verification-based stop condition —
 then watch it fix real bugs, locally, for $0, using [JetBrains
@@ -53,7 +53,6 @@ not both at once. Without Homebrew: install `uv` with
 <summary><b>Linux</b></summary>
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
 curl -fsSL https://ollama.com/install.sh | sh
 ```
 
