@@ -11,20 +11,25 @@ token accounting. See `ARCHITECTURE.md` for the annotated version.
 Every exercise test runs against a scripted fake model, so the workshop does not depend on your
 Ollama setup working — real inference is the reward, not a prerequisite.
 
-## Which tier are you?
+## Which setup option should you use?
 
-| Tier | Who | RAM | Endpoint |
+| Option | Who | RAM | Endpoint |
 |---|---|---|---|
 | 1 (default) | 16 GB+ laptop | 16 GB+ | local Ollama, `http://localhost:11434/v1` |
-| 2 | weak laptop, can't run an 8 GB model | any | Kaggle notebook — `notebooks/kaggle.ipynb` (**untested — see below**) |
-| 3 | last resort / pair up | any | `qwen2.5-coder:1.5b` locally (~1 GB) |
+| 2 | weaker laptop, can't run the 8 GB Mellum2 model | much lower | `qwen2.5-coder:1.5b` locally (~1 GB) |
+| 3 | browser-based setup | any | Google Colab notebook — `notebooks/colab.ipynb` (**tested**) |
 
-Tiers 1 and 3 run on macOS, Linux, WSL2, and native Windows — the per-OS install commands are in
-step 1 below, and the handful of differences that actually matter (sandbox limits, the RAM check) are
-in [Platform notes](#platform-notes). Tier 2 needs only a browser, so it is the same on every OS.
+Options 1 and 2 run on macOS, Linux, WSL2, and native Windows — the per-OS install commands are in
+the local setup sections below, and the handful of differences that actually matter (sandbox limits,
+the RAM check) are in [Platform notes](#platform-notes). Option 3 needs only a browser.
+
 Windows users: prefer WSL2.
 
-## Tier 1 setup
+Option 3 changes the **Build the agent** lesson workflow. The concepts and files are the same, but
+Colab users edit the repository and run checks from notebook cells instead of following the
+IDE-specific instructions literally.
+
+## Option 1: Mellum2 local setup
 
 Do this **before the workshop** — the model pull is 8 GB and venue wifi will not survive 20 people
 doing it at once.
@@ -184,21 +189,7 @@ fallback and not the instruction:
 
 The `ollama create` above makes all four rows unnecessary. Do that instead.
 
-## Tier 2: Kaggle (untested)
-
-If your laptop cannot run an 8 GB model, use `notebooks/kaggle.ipynb`. It runs Ollama, the model,
-and this repo entirely *inside* the Kaggle container — there is no tunnel back to your laptop, and
-no code changes; `MELLUM_BASE_URL` stays at its default because inside that container,
-`localhost:11434` *is* local.
-
-Requirements: a phone-verified Kaggle account (needed to enable internet access in notebook
-settings — do this ahead of time) and a GPU accelerator selected for the notebook.
-
-**This path has not been run on Kaggle from this environment — there is no Kaggle access here.**
-It is built from the same commands verified for tier 1, but treat it as unverified until someone
-runs it end to end. If Ollama does not come up under Kaggle, fall back to tier 3.
-
-## Tier 3: the 1 GB fallback
+## Option 2: Qwen local — the 1 GB fallback
 
 macOS, Linux, WSL2:
 
@@ -226,12 +217,34 @@ uv run agentfix solve tasks/workshop/01-shopcart --verbose
 `Remove-Item Env:\MELLUM_MODEL` to go back to Mellum2. (In `cmd.exe` it is
 `set MELLUM_MODEL=agentfix-qwen`.)
 
-The `ollama create` is for the same reason as tier 1: without it the context is 4,096 and long
+The `ollama create` is for the same reason as Option 1: without it the context is 4,096 and long
 runs lose their own history. Skipping it makes `doctor`'s `context window` check fail.
 
 Smaller and faster, but noticeably less reliable at multi-step tool use than Mellum2 — expect it
 to need more steps, or to fail tasks Mellum2 solves. Good enough to see the loop work; not the
 demo model.
+
+## Option 3: Google Colab notebook (tested)
+
+If you want a browser-based setup, use `notebooks/colab.ipynb`. The model runtime, repository,
+file edits, and test commands run inside Google Colab rather than on the learner's laptop.
+
+This path has been tested end to end.
+
+### How Colab changes the Build the agent lesson
+
+Colab is not a drop-in replacement for the IDE workflow. Learners still build the same three parts:
+
+1. the `run_tests` tool and its JSON schema,
+2. the loop's tool dispatch,
+3. the verification-based stop condition.
+
+The difference is how they work through the lesson. Instead of editing files in the IDE and running
+the terminal commands exactly as written, Colab users edit the repository from the notebook
+environment and run the corresponding checks from notebook cells.
+
+The three stages, target files, and expected behavior do not change. Only the environment and the
+lesson instructions used to perform those steps are different.
 
 ## Command reference
 
@@ -604,10 +617,7 @@ Verified on macOS: with the image built, `AGENTFIX_SANDBOX=docker uv run agentfi
   timeout-leaves-nothing-behind. The image's pytest is pinned to the version in `uv.lock` so both
   backends verify fixes identically (confirmed in-container: pytest 9.1.1);
   `tests/test_sandbox_image.py` enforces that pin without needing a daemon.
-- **The Kaggle notebook has never been run on Kaggle.** `notebooks/kaggle.ipynb` is built from
-  commands verified locally, but nobody has executed it end to end in a Kaggle container. Its
-  cells now stop with a clear error rather than cloning a placeholder URL, and it clones the
-  `solutions` branch so the demo cell works — but treat tier 2 as unverified.
+- **The Google Colab notebook is the supported browser path.** `notebooks/colab.ipynb` has been tested end to end. It uses a notebook-specific workflow for the **Build the agent** lesson rather than reproducing the IDE steps literally.
 - **Known failure class: the agent's only oracle is `run_tests`.** `write_file` refuses paths under
   `tests/` or named `test_*.py`, and a successful write invalidates the last test result, so
   neither rewriting the specification nor a stale green run can produce a false `SOLVED`. Both were
