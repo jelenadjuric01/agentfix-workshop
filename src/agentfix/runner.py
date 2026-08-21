@@ -17,7 +17,12 @@ from agentfix.llm.types import LLMClient
 from agentfix.sandbox.base import get_backend
 from agentfix.tasks.loader import load_task, workspace
 from agentfix.tools.base import ToolRegistry
-from agentfix.tools.fs import ListFilesTool, ReadFileTool, WriteFileTool
+from agentfix.tools.fs import (
+    ListFilesTool,
+    ReadFileTool,
+    WriteFileTool,
+    _relative_files,
+)
 from agentfix.tools.tests_tool import RunTestsTool
 
 
@@ -42,6 +47,10 @@ def solve_task(
 
     task = load_task(Path(task_dir))
 
+    # Read from the PRISTINE template, not the workspace copy, so the set cannot grow during a
+    # run: an agent that managed to create a file could otherwise then write to it.
+    writable = frozenset(_relative_files(task.template_dir))
+
     # Every run gets a disposable copy, and it is deleted when this block exits by any route.
     with workspace(task) as work_dir:
         # Built first because WriteFileTool needs its `invalidate` method below.
@@ -55,7 +64,7 @@ def solve_task(
                 ListFilesTool(work_dir),
                 ReadFileTool(work_dir),
                 # a write makes the last test result stale, so `is_done` must not trust it
-                WriteFileTool(work_dir, on_write=run_tests.invalidate),
+                WriteFileTool(work_dir, on_write=run_tests.invalidate, allowed=writable),
                 run_tests,
             ]
         )

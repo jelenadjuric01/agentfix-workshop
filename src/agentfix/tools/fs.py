@@ -26,6 +26,12 @@ PROTECTED_HINT = (
 )
 
 
+NEW_FILE_HINT = (
+    "Refused: {path} is not one of this project's existing files. Fix a file that is "
+    "already there rather than creating a new one."
+)
+
+
 class PathEscapeError(Exception):
     """Raised when a requested path resolves outside the task root."""
 
@@ -63,7 +69,14 @@ def is_test_path(root: Path, target: Path) -> bool:
         # Not under the root at all. resolve_in_root already refused it; say "not a test
         # file" rather than crashing.
         return False
-    return "tests" in relative.parts or relative.name.startswith("test_")
+    # Both comparisons are case-INSENSITIVE, and that is not pedantry. macOS ships a
+    # case-insensitive filesystem, so "Tests/TEST_CART.PY" addresses the very same inode as
+    # "tests/test_cart.py" — while a case-sensitive check calls it an ordinary source file and
+    # waves it through. Reproduced: the agent overwrote the protected suite with a trivially
+    # passing test and the run reported SOLVED with the bug untouched.
+    if any(part.lower() == "tests" for part in relative.parts):
+        return True
+    return relative.name.lower().startswith("test_")
 
 
 def _relative_files(root: Path) -> list[str]:
@@ -158,8 +171,26 @@ class WriteFileTool:
         "required": ["path", "content"],
     }
 
-    def __init__(self, root: Path, on_write: Callable[[], None] | None = None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        on_write: Callable[[], None] | None = None,
+        allowed: frozenset[str] | None = None,
+    ) -> None:
         self.root = root
+        # The relative paths this tool may write, taken from the task's pristine template.
+        #
+        # An allow-list rather than more refusal rules, because "does this path look dangerous"
+        # is an unwinnable game. Two reproduced escapes made the case: writing `pytest.py` at
+        # the workspace root shadows the module `run_tests` executes (a red suite then exits 0,
+        # so `is_done` reports SOLVED with the bug untouched), and a `.pth` file under a
+        # workspace-relative site-packages path runs arbitrary code at interpreter startup.
+        # Neither goes anywhere near a name `is_test_path` inspects.
+        #
+        # The agent's job is to repair a file that already exists, so it never needs to create
+        # one. Saying exactly that closes every "write a NEW file that changes what the tests
+        # do" route at once. `None` disables the check, which only tests use.
+        self.allowed = allowed
         # A callback invoked after a successful write. runner.py passes
         # `run_tests.invalidate`, so writing a file discards the previous test result: that
         # result described the code as it was, and stale green tests would let `is_done`
@@ -175,6 +206,14 @@ class WriteFileTool:
         # Guard the oracle: the tests are the specification, so they are not writable.
         if is_test_path(self.root, target):
             return ToolResult(False, PROTECTED_HINT.format(path=path))
+
+        # Then the allow-list. Compared on the resolved path's own relative form, so a
+        # case-variant alias of a real file ("Tests/TEST_CART.PY") does not match the template
+        # entry it aliases, and is refused even on a case-insensitive filesystem.
+        if self.allowed is not None:
+            relative = str(target.relative_to(self.root.resolve()))
+            if relative not in self.allowed:
+                return ToolResult(False, NEW_FILE_HINT.format(path=path))
 
         # Parse before writing. `ast.parse` compiles the text without executing any of it,
         # so it is a syntax check with no side effects. Rejecting a broken file up front
