@@ -37,7 +37,7 @@ class Tracer:
             marker = "→" if event.kind == "llm" else "←"
             # Newlines flattened and the text clipped so one event stays on one line. A
             # readable 20-line trace beats a faithful 500-line dump of file contents.
-            detail = event.detail.replace("\n", " ")[:100]
+            detail = event.detail.replace("\n", " ")[:250]
             print(
                 f"  step {event.step} {marker} {event.kind}:{event.name}  "
                 f"[ctx {event.prompt_tokens} tok, {event.latency_s:.1f}s]  {detail}"
