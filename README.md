@@ -623,3 +623,7 @@ Verified on macOS: with the image built, `AGENTFIX_SANDBOX=docker uv run agentfi
   neither rewriting the specification nor a stale green run can produce a false `SOLVED`. Both were
   reproducible before those guards; see `ARCHITECTURE.md` for what remains open (nothing stops the
   agent from special-casing the exact inputs the tests use).
+
+## License
+
+MIT — see [LICENSE](LICENSE).
