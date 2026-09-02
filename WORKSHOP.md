@@ -1,20 +1,30 @@
 # Instructor Runsheet
 
-90 minutes, developers new to agents. Read `README.md`'s tier table and `ARCHITECTURE.md` before
-the session; this document is what to run and say, minute by minute.
+Read `README.md`'s setup-option table and
+`ARCHITECTURE.md` before the session; this document is what to run and say, minute by minute.
+
+The three setup options are the ones `README.md` names: **Option 1** Mellum2 locally (16 GB+),
+**Option 2** Qwen `2.5-coder:1.5b` locally (the ~1 GB fallback), **Option 3** exercises locally
+plus Google Colab for the real-model run.
 
 ## Pre-workshop checklist
 
 - [ ] Pre-work email sent (at least a week ahead): pull the 8 GB model, **run
       `ollama create agentfix-mellum2 -f Modelfile`**, run `agentfix doctor`, send the output;
-      phone-verify a Kaggle account if planning tier 2; bring a laptop charger.
-- [ ] `doctor` outputs collected from attendees and triaged — anyone still failing gets a remedy
-      or a tier-3/pair-up plan before the room opens. **`ram` and `context window` are the two
-      that decide someone's tier**; a `context window: 4096` line means they skipped the
-      `ollama create` and their agent will lose its own system prompt on long runs.
+      bring a laptop charger.
+- [ ] `doctor` outputs collected from attendees and triaged — anyone still failing gets a remedy,
+      a move to Option 2 or Option 3, or a pair-up plan before the room opens. **`ram` and
+      `context window` are the two lines that decide someone's option**; a `context window: 4096`
+      line means they skipped the `ollama create` and their agent will lose its own system prompt
+      on long runs.
+- [ ] Anyone routed to Option 3 told what to expect: they do every exercise locally against
+      the fake model, their local `agentfix doctor` is *expected* to fail and needs no remedy, and
+      `notebooks/agentfix.ipynb` covers the real-model run in the browser (it runs its own
+      `doctor` in Colab — that is the output to collect from them).
 - [ ] USB sticks prepared with the model GGUF, for anyone whose wifi can't do 8 GB on the day.
-- [ ] Endpoint decision made per student: tier 1 (local), tier 2 (Kaggle), or tier 3 (1.5B model) —
-      `doctor`'s `ram` line now says this for you, so collect it rather than asking people.
+- [ ] Endpoint decision made per student: Option 1 (Mellum2 local), Option 2 (Qwen 1.5B local),
+      or Option 3 (exercises local, Colab for the real model) — `doctor`'s `ram` line now says
+      this for you, so collect it rather than asking people.
 - [ ] `git checkout solutions` tested end to end on the instructor machine (see 0:08 below).
 - [ ] Docker demo machine has a running daemon **and** a built image, verified same-day:
       `docker info`, then `docker build -t agentfix-sandbox -f Dockerfile.sandbox .` (the trailing
@@ -24,18 +34,14 @@ the session; this document is what to run and say, minute by minute.
       "broken" — the isolation-flag assertions and `tests/test_sandbox_image.py` need no daemon —
       but do not demo from a skipping suite.
 
-## Minute-by-minute
+## After the session
 
-| Time | Segment | Command | Say |
-|---|---|---|---|
-| 0:00–0:08 | Setup triage; what an agent is | — | Loop, tools, verification. An agent is a while-loop around a chat model that can call functions and sees the result. Nothing more magical than that. |
-| 0:08–0:16 | Live demo: finished agent fixes task 01 | `git checkout solutions && uv run agentfix solve tasks/workshop/01-shopcart --verbose` | **Run this from `solutions`, not `main`.** `main` is deliberately stubbed for the exercises — `agentfix solve` there prints a legible error and exits 1 by design (verified: `BadRequestError` on the empty tool schema, caught by the CLI, printed to stderr with a pointer to `exercises/README.md`). Running the demo on `main` live would look like a broken demo instead of the intended student starting point. |
-| 0:16–0:24 | The tool-calling contract | walk `src/agentfix/tools/base.py` | schema → the model emits a `tool_call` → `ToolRegistry.dispatch` → a `role="tool"` message with the `tool_call_id` → appended to history. Two methods (`schemas`, `dispatch`) are the whole bridge between model output and real effects. |
-| 0:24–0:36 | **Stage 1** — `run_tests` + its schema | `git checkout main` (back to the stub); `uv run pytest exercises/stage_1 -v` | Students edit `src/agentfix/tools/tests_tool.py`. Stuck? `git checkout stage-1-solution`. |
-| 0:36–0:50 | **Stage 2** — loop dispatch; run on task 01 | `uv run pytest exercises/stage_2 -v` then `uv run agentfix solve tasks/workshop/01-shopcart --verbose` | Students edit the dispatch block in `src/agentfix/agent/loop.py`. The classic bug is forgetting `tool_call_id` — the test names it directly. At `stage-2-solution` the stop condition does not exist yet, so this run will always burn its full 10-step budget and print `NOT SOLVED` — that's expected and the point, not a failure. Checkpoint: `stage-2-solution`. |
-| 0:50–1:08 | **Stage 3** — stop condition; run on task 02 | `uv run pytest exercises/stage_3 -v` then `uv run agentfix solve tasks/workshop/02-invoice --verbose` | The naive "model stopped calling tools" or "model said DONE" both fail here — the scripted model in the test claims success while tests still fail. Task 02's bug is not in the file the failing test points at, which is why `list_files`/`read_file` matter. Checkpoint: `stage-3-solution`. **This segment is protected at all costs — cut everything else before this.** |
-| 1:08–1:16 | Eval discussion (demo-only) | show `results/precomputed/workshop.json` and `results/precomputed/humanevalfix.json`; do **not** run a live eval | HumanEvalFix (20 tasks) took **8m09s wall clock** and 185,235 tokens on this machine at 51 tok/s — that is exactly why this is discussion, not a live activity. pass@1 is 0.60 (12/20), median 7 steps, max 10 (the cap); every one of the 8 failures spent all 10 steps. The best story here: it was 0.50 until the loop's stop condition stopped being decorative — four failures used to quit at 3–5 steps with budget left. Two lines of loop change moved pass@1 more than any prompt tweak did. The contrast to draw: the predecessor project's 1.5B model scored **0.305 pass@1 (50/164)** on the full HumanEvalFix Python split, GPU-served — but **single-shot**, one patch per task with no loop and no tools. Its 13-config decoding sweep ranged 0.262–0.317, which at n=164 is inside the ±0.036 standard error, and only 31 of 164 tasks ever changed verdict. So: tuning temperature and beams moved nothing; a loop with a test-execution oracle roughly doubled the fix rate. Not apples-to-apples (task count, hardware, harness all differ) — the mechanism is the point. Those raw reports are no longer in the repo; `git log --diff-filter=D -- results/legacy` finds them in history. |
-| 1:16–1:30 | Sandbox safety + Docker demo; Thinking variant; next steps | `docker build -t agentfix-sandbox -f Dockerfile.sandbox .` then `AGENTFIX_SANDBOX=docker uv run pytest tests/test_docker_backend.py -v` | Your agent executes model-written code — here is what that means and what production systems do about it. Two boundaries: the tool layer confines *paths* (`resolve_in_root` rejects escapes before a read/write happens); the sandbox confines *execution* (no network, memory/pid/cpu caps, non-root). **Verify the daemon is up and the image is built before this segment** — container execution is verified (20 passed, no skips, with the image built), but only on a machine where you have actually built it, and a live failure here undercuts the safety point. The five behaviour tests are the demo: no network, unwritable workspace, and a hanging test killed with no container left behind. Build the image with the tagged command above, then run `uv run pytest tests/test_docker_backend.py` to confirm it's live before the segment starts. Close with the Mellum2 Thinking variant as the natural next step (same code, one env var, visible `<think>` blocks) and mention planning/reflection/parallel tools as deliberately out of scope (see `ARCHITECTURE.md`). |
+Point attendees at [`CLEANUP.md`](CLEANUP.md) — the 8 GB model is the part people are glad to be
+told about, especially on a borrowed or shared laptop. `ollama rm` on the derived *and* the base
+model is the whole win; the rest is optional.
+
+Send [`TROUBLESHOOT.md`](TROUBLESHOOT.md) with the same message for anyone who wants to keep going
+at home without you in the room.
 
 ## Cut order when the room runs slow
 

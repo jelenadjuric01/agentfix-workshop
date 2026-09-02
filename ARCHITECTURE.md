@@ -175,7 +175,7 @@ macOS/Apple Silicon; verified empirically on this machine (`_apply_limits` is ca
 platform). On macOS, memory is effectively uncapped by `SubprocessBackend`; the CPU-time,
 file-size, and process-count limits still apply, plus the wall-clock `timeout_s` on the
 `subprocess.run` call itself. Real memory capping on macOS comes only from `DockerBackend`. This
-matters less than it sounds: the Kaggle tier (tier 2) runs on Linux, so the memory cap holds
+matters less than it sounds: Colab (Option 3) runs on Linux, so the memory cap holds
 exactly where the weakest laptops in the room are running — the machines with no cap are, by
 construction, the ones with 16 GB+ of their own RAM to begin with.
 

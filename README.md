@@ -11,13 +11,18 @@ token accounting. See `ARCHITECTURE.md` for the annotated version.
 Every exercise test runs against a scripted fake model, so the workshop does not depend on your
 Ollama setup working — real inference is the reward, not a prerequisite.
 
+When something breaks, go to [`TROUBLESHOOT.md`](TROUBLESHOOT.md) rather than reading this file end
+to end — every problem that has actually come up, one collapsible hint each. When you are done and
+want the machine back as it was, [`CLEANUP.md`](CLEANUP.md) removes the models, Ollama, and
+everything else this workshop installed.
+
 ## Which setup option should you use?
 
 | Option | Who | RAM | Endpoint |
 |---|---|---|---|
 | 1 (default) | 16 GB+ laptop | 16 GB+ | local Ollama, `http://localhost:11434/v1` |
 | 2 | weaker laptop, can't run the 8 GB Mellum2 model | much lower | `qwen2.5-coder:1.5b` locally (~1 GB) |
-| 3 | browser-based setup | any | Google Colab notebook — `notebooks/colab.ipynb` (**tested**) |
+| 3 | can't run either model locally | any | local exercises + Google Colab notebook — `notebooks/agentfix.ipynb` (**tested**) |
 
 Options 1 and 2 run on macOS, Linux, WSL2, and native Windows — the per-OS install commands are in
 the local setup sections below, and the handful of differences that actually matter (sandbox limits,
@@ -25,9 +30,9 @@ the RAM check) are in [Platform notes](#platform-notes). Option 3 needs only a b
 
 Windows users: prefer WSL2.
 
-Option 3 changes the **Build the agent** lesson workflow. The concepts and files are the same, but
-Colab users edit the repository and run checks from notebook cells instead of following the
-IDE-specific instructions literally.
+Option 3 does not change the lesson. Those learners work through the whole workshop locally like
+everyone else — the exercise tests need no model — and use the notebook for the one step that
+needs real inference. They skip `agentfix doctor` locally, where it is expected to fail.
 
 ## Option 1: Mellum2 local setup
 
@@ -224,27 +229,38 @@ Smaller and faster, but noticeably less reliable at multi-step tool use than Mel
 to need more steps, or to fail tasks Mellum2 solves. Good enough to see the loop work; not the
 demo model.
 
-## Option 3: Google Colab notebook (tested)
+## Option 3: local exercises + Google Colab for the model (tested)
 
-If you want a browser-based setup, use `notebooks/colab.ipynb`. The model runtime, repository,
-file edits, and test commands run inside Google Colab rather than on the learner's laptop.
+For machines that cannot comfortably hold either model. Only one thing moves to the browser: the
+real model. Everything else stays where it is.
+
+**Do the workshop locally, unchanged.** Clone the repo, install with `uv sync`, build the same
+three parts — the `run_tests` tool and its JSON schema, the loop's tool dispatch, the
+verification-based stop condition — and run the exercise tests:
+
+```bash
+uv run pytest exercises/stage_1        # or stage_2, stage_3
+uv run pytest                          # every test that needs no model
+```
+
+Those run against a scripted fake model. No Ollama, no model download, no GPU. They pass on any
+machine, including a 3.4 GB Chromebook.
+
+**Skip `agentfix doctor` on this option.** It will fail, and that is expected — it looks for
+Ollama, a derived model, and a server on `localhost:11434`, none of which exist on this laptop by
+design. Nothing is broken and there is nothing to fix.
+
+**Run the real model in the browser.** Open `notebooks/agentfix.ipynb` in Google Colab when you
+reach the point of running the agent for real. The notebook does only that step: it installs
+Ollama inside the Colab runtime, derives `agentfix-qwen` with `num_ctx 16384`, puts the finished
+agent in place, runs `agentfix doctor` there, and then `agentfix solve` on the workshop tasks.
+That `doctor` run — in Colab, not on the laptop — is the one that has to pass.
+
+The notebook checks out the `stage-3-solution` versions of the two exercise files rather than
+uploading local edits, so what runs against the real model is guaranteed to work. The learner's
+own implementation is verified where they wrote it, by the exercise tests above.
 
 This path has been tested end to end.
-
-### How Colab changes the Build the agent lesson
-
-Colab is not a drop-in replacement for the IDE workflow. Learners still build the same three parts:
-
-1. the `run_tests` tool and its JSON schema,
-2. the loop's tool dispatch,
-3. the verification-based stop condition.
-
-The difference is how they work through the lesson. Instead of editing files in the IDE and running
-the terminal commands exactly as written, Colab users edit the repository from the notebook
-environment and run the corresponding checks from notebook cells.
-
-The three stages, target files, and expected behavior do not change. Only the environment and the
-lesson instructions used to perform those steps are different.
 
 ## Command reference
 
@@ -617,7 +633,7 @@ Verified on macOS: with the image built, `AGENTFIX_SANDBOX=docker uv run agentfi
   timeout-leaves-nothing-behind. The image's pytest is pinned to the version in `uv.lock` so both
   backends verify fixes identically (confirmed in-container: pytest 9.1.1);
   `tests/test_sandbox_image.py` enforces that pin without needing a daemon.
-- **The Google Colab notebook is the supported browser path.** `notebooks/colab.ipynb` has been tested end to end. It uses a notebook-specific workflow for the **Build the agent** lesson rather than reproducing the IDE steps literally.
+- **The Google Colab notebook is the supported browser path.** `notebooks/agentfix.ipynb` has been tested end to end. It covers only the real-model run: those learners do the exercises locally against the fake model and skip the local `doctor` check, which is expected to fail for them.
 - **Known failure class: the agent's only oracle is `run_tests`.** `write_file` refuses paths under
   `tests/` or named `test_*.py`, and a successful write invalidates the last test result, so
   neither rewriting the specification nor a stale green run can produce a false `SOLVED`. Both were
