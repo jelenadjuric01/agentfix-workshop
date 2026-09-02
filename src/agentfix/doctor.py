@@ -126,7 +126,7 @@ def _check_ram() -> Check:
         return Check(
             "ram",
             False,
-            f"{detail} — under 16 GB, use tier 2 (Kaggle) or tier 3 (qwen2.5-coder:1.5b); "
+            f"{detail} — under 16 GB, use tier 2 (qwen2.5-coder:1.5b) or tier 3 (notebook); "
             "see README.md",
         )
     if free is not None and free < COMFORTABLE_FREE_RAM_BYTES:
