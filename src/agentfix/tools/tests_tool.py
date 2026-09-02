@@ -11,7 +11,6 @@ collect it as a test module.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from agentfix.sandbox.base import ExecResult, ExecutionBackend
 from agentfix.tools.base import ToolResult
@@ -25,8 +24,7 @@ class RunTestsTool:
     # told: nothing hands the agent the failing test output up front, so discovering the
     # failure is part of the task.
     description = "Run the project's test suite and return the result. This is the source of truth."
-    # TODO(stage-1): the JSON Schema the model sees. run_tests needs no arguments.
-    parameters: dict[str, Any] = {}
+    parameters = {"type": "object", "properties": {}}  # takes no arguments
 
     def __init__(
         self,
@@ -58,9 +56,12 @@ class RunTestsTool:
         self.last_result = None
 
     def run(self) -> ToolResult:
-        # One contract note, because getting it wrong produces a very confusing agent:
-        # failing tests are not a tool *error*. The tool worked; what it reports is that the
-        # tests are red. That information is exactly what the agent needs in order to act.
-        # TODO(stage-1): run the tests via self.backend, store self.last_result,
-        # and return a ToolResult whose content tells the model what happened.
-        raise NotImplementedError("stage 1: implement RunTestsTool.run")
+        result = self.backend.run(self.root, self.command, timeout_s=self.timeout_s)
+        self.last_result = result
+
+        # Note `ToolResult(True, ...)` even when the tests fail: the *tool* worked. Failing
+        # tests are the information the agent needs, not a tool error. The headline is
+        # prepended because pytest output buries the verdict, and a 12B model reading 2,000
+        # characters of traceback does better when the answer is in the first line.
+        headline = "All tests passed." if result.passed else "Tests failed."
+        return ToolResult(True, f"{headline}\n\n{result.output}".strip())
