@@ -238,14 +238,22 @@ def run_agent(
                 # Progress: reset the counter and remember this call as the new baseline.
                 guard_hits = 0
                 previous_signature = signature
-                # This is the one place where model output becomes a real effect. Two
-                # constraints worth knowing before you write it: `registry.dispatch` never
-                # raises (see tools/base.py — every failure comes back as an observation), and
-                # the API requires every call the model made to be answered by a message
-                # carrying its `tool_call_id`.
-                # TODO(stage-2): dispatch the call through the registry and append the
-                # resulting tool message to `messages`. Keep the tool_call_id.
-                raise NotImplementedError("stage 2: dispatch the tool call")
+
+                tool_started = time.time()
+                # The one line where model output becomes a real effect. `dispatch` never
+                # raises — see tools/base.py — so no failure here can end the run.
+                outcome = registry.dispatch(call)
+                messages.append(outcome.as_message())
+                tracer.record(
+                    TraceEvent(
+                        step=step,
+                        kind="tool",
+                        name=call.name,
+                        detail=outcome.result.content,
+                        prompt_tokens=reply.prompt_tokens,
+                        latency_s=round(time.time() - tool_started, 2),
+                    )
+                )
 
             if guard_hits >= MAX_GUARD_HITS:
                 break
