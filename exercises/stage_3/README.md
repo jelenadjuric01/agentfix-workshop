@@ -10,10 +10,6 @@ The tempting answers are both wrong:
 The agent is done when **the tests pass**. Verification by execution, not by assertion.
 That is the difference between a demo and something you would let near real code.
 
-Until you fix it, `is_done` just returns `False` — so `exercises/stage_3` fails with plain
-`AssertionError`s (`solved` stays `False` even once the tests genuinely pass), not a crash.
-`agentfix solve` will run to completion and report `NOT SOLVED` rather than raising.
-
     uv run pytest exercises/stage_3 -v
 
 ## Finished early? When does your verification go stale?

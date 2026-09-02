@@ -86,22 +86,15 @@ def task_prompt(task: Task) -> str:
     return task.prompt
 
 
-def is_done(run_tests: RunTestsTool) -> bool:  # noqa: ARG001
-    """The only thing that can end a run early — so it decides what "solved" means.
+def is_done(run_tests: RunTestsTool) -> bool:
+    """The agent is done when the tests actually pass — never because it says so.
 
-    Two failure modes a correct implementation has to rule out: a model that claims a fix it
-    never made, and a model that passed the tests once and then wrote a file that broke them
-    again. (`RunTestsTool.invalidate` handles the second by clearing the stored result on
-    every write, so a stale green result cannot be reused.)
-
-    Until this is implemented it returns False, so the agent runs its full step budget and
-    reports NOT SOLVED — the honest behaviour for an agent whose stop condition is missing.
+    The highest-value idea in the whole design, and the only thing that can end a run early.
+    Two failure modes it rules out: a model that claims a fix it never made, and a model that
+    passed the tests once and then broke them again (`RunTestsTool.invalidate` clears
+    `last_result` on every write, so a stale green result cannot be reused).
     """
-    # The noqa above silences "unused argument" only because this stub ignores `run_tests`.
-    # Delete it once your implementation actually reads the parameter.
-    # TODO(stage-3): the agent is done when the tests actually pass.
-    # Not when the model stops calling tools. Not when it says "DONE".
-    return False
+    return run_tests.last_result is not None and run_tests.last_result.passed
 
 
 def _call_signature(call: ToolCall) -> tuple[str, str]:
