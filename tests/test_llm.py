@@ -65,7 +65,7 @@ def test_config_defaults_match_spec():
     assert BASE_MODEL == "hf.co/JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q4_K_M"
     assert config.temperature == 0.6
     assert config.top_p == 0.95
-    assert config.max_tokens == 1024
+    assert config.max_tokens == 4096
     assert config.num_ctx == 16384
 
 

@@ -10,7 +10,7 @@ piece of it, in the order worth doing. The models are almost all of the disk spa
 | What | Where it lives | Size |
 |---|---|---|
 | `agentfix-mellum2` + its base model | Ollama's model store | ~8 GB |
-| `agentfix-qwen` + `qwen2.5-coder:1.5b` | Ollama's model store | ~1 GB |
+| `agentfix-qwen3` + `qwen3:1.7b` | Ollama's model store | ~1.4 GB |
 | Ollama itself | see below, per OS | a few hundred MB |
 | `agentfix-sandbox` Docker image | Docker, only if you ran the sandbox demo | a few hundred MB |
 | `.venv`, `uv` caches | inside the clone, and `~/.cache/uv` | a few hundred MB |
@@ -31,7 +31,7 @@ ollama rm agentfix-mellum2 hf.co/JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q4_K_
 ```
 
 ```bash
-ollama rm agentfix-qwen qwen2.5-coder:1.5b
+ollama rm agentfix-qwen3 qwen3:1.7b
 ```
 
 Remove the derived `agentfix-…` model **and** the base model it was built from. Deleting only the
@@ -73,8 +73,8 @@ Use `reg delete` rather than `setx MELLUM_MODEL ""` — `setx` with an empty val
 variable present but empty, which reads as a model named `""` and fails more confusingly than a
 missing variable does. Already-running programs keep the old value until they restart.
 
-While you are here, delete `Modelfile.agentfix-qwen` if the Windows path of Option 2 created it in
-the repo root. Do **not** delete `Modelfile` — that one ships with the repo.
+While you are here, delete `Modelfile.agentfix-qwen3` if the Windows path of Option 2 created it
+in the repo root. Do **not** delete `Modelfile` — that one ships with the repo.
 
 ## 3. Remove Ollama itself
 

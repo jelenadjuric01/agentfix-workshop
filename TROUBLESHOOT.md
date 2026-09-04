@@ -71,8 +71,8 @@ ollama --version
 ```
 
 Note that in this repo `MELLUM_MODEL` is normally set per session
-(`$env:MELLUM_MODEL = 'agentfix-qwen'`) or per command
-(`MELLUM_MODEL=agentfix-qwen uv run agentfix …` on POSIX), so it is gone the moment you open a new
+(`$env:MELLUM_MODEL = 'agentfix-qwen3'`) or per command
+(`MELLUM_MODEL=agentfix-qwen3 uv run agentfix …` on POSIX), so it is gone the moment you open a new
 shell. That is expected — set it again, or use `setx` if you want it to persist.
 </details>
 
@@ -88,7 +88,7 @@ one:
 ollama create agentfix-mellum2 -f Modelfile
 ```
 
-or, on Option 2, the `ollama create agentfix-qwen` command from the README.
+or, on Option 2, the `ollama create agentfix-qwen3` command from the README.
 
 Do not skip it. At 4,096 tokens Ollama drops the *earliest* messages once the conversation grows
 past the limit — and the earliest message is the system prompt telling the agent it is not done
@@ -131,9 +131,10 @@ To go back to the default, clear the override: `unset MELLUM_MODEL`, or
 <details>
 <summary><b>The model is painfully slow, or the machine runs out of memory</b></summary>
 
-Mellum2 is an 8 GB model and wants 16 GB of RAM to be comfortable. Switch to Option 2 (Qwen,
-~1 GB) — the README has the four commands. It is less reliable at multi-step tool use, so expect
-more steps or an occasional task it cannot fix, but the loop behaves the same.
+Mellum2 is an 8 GB model and wants 16 GB of RAM to be comfortable. Switch to Option 2
+(`qwen3:1.7b`, ~1.4 GB) — the README has the commands. The loop behaves the same, but the model is
+much smaller and may not do as well, so expect more steps or a task it cannot fix. It also reasons
+before it acts, so turns take longer.
 
 Under 8 GB, use Option 3: do the exercises locally against the fake model and run
 `notebooks/agentfix.ipynb` in Colab for the real-model run.
@@ -165,8 +166,8 @@ Implement the stages, or see the finished agent with `git checkout solutions` (o
 <details>
 <summary><b>The agent prints <code>NOT SOLVED</code></b></summary>
 
-Not necessarily your bug. Real models do not fix every task, and the Qwen fallback is noticeably
-less reliable at multi-step tool use than Mellum2.
+Not necessarily your bug. Real models do not fix every task, and the Option 2 model
+(`qwen3:1.7b`) is much smaller than Mellum2 and may not do as well.
 
 Read the `--verbose` trace before assuming the code is wrong. You want the shape of a working
 loop: the model calls `run_tests`, looks around with `list_files` / `read_file`, writes a file, and
@@ -174,11 +175,34 @@ runs the tests again. If that shape is there and the run simply ran out of steps
 implementation is doing its job.
 
 Two shapes that *do* point at your code: the agent never dispatches a tool at all (Stage 2), or the
-run ends while the tests are still red (Stage 3).
+run ends while the tests are still red (Stage 3). For the first one, check the next entry before
+you go looking at your dispatch — a model that cannot emit tool calls produces the same trace.
 
 At the `stage-2-solution` checkpoint `NOT SOLVED` is guaranteed — the stop condition does not exist
 yet, so the run always burns its full 10-step budget. That is the point of the checkpoint, not a
 failure.
+</details>
+
+<details>
+<summary><b>Every trace line is the model printing JSON, and no tool ever runs</b></summary>
+
+A trace where every step is an `llm:` line printing a JSON object, with no `tool:` line between
+them, means the model is *describing* a tool call as text instead of making one. The client reads
+native `tool_calls` off the reply and nothing else, so an empty `tool_calls` field means no tool is
+dispatched, `run_tests` never runs, the stop condition never sees a passing suite, and the run
+spends its whole budget. The loop guard cannot help either: it compares one tool call against the
+previous one, and there are no tool calls to compare.
+
+**This is the model, not your code.** Not every model does OpenAI-style function calling, and
+small coder-tuned ones frequently do not. It only comes up if you pointed `MELLUM_MODEL` at a
+model of your own choosing — the two the README names both emit real tool calls.
+
+Check which model actually served the run before anything else:
+
+```bash
+ollama ps
+echo $MELLUM_MODEL
+```
 </details>
 
 <details>

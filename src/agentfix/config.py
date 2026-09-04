@@ -47,9 +47,14 @@ class LLMConfig:
     temperature: float = 0.6
     top_p: float = 0.95
 
-    # Cap on ONE reply. Relevant because write_file must emit a complete file: this is the
-    # ceiling on how large a file the agent can rewrite in a single turn.
-    max_tokens: int = 1024
+    # Cap on ONE reply, and it has to cover two different things. Against Mellum2 it is the
+    # ceiling on how large a file `write_file` can emit in a single turn. Against the Option 2
+    # model it is that file PLUS the reasoning, because qwen3 is a thinking model and its
+    # thinking is not short. Too low a cap truncates the reply mid-thought, and a reply cut off
+    # mid-thought loses the tool call at the end of it: the model appears to stop acting for no
+    # reason, and the loop guard cannot catch it, because a turn with no tool call has no call
+    # to compare against the previous one.
+    max_tokens: int = 4096
 
     # Sent with every request, but Ollama's /v1 endpoint ignores it — see llm/client.py.
     num_ctx: int = 16384

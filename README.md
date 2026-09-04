@@ -21,7 +21,7 @@ everything else this workshop installed.
 | Option | Who | RAM | Endpoint |
 |---|---|---|---|
 | 1 (default) | 16 GB+ laptop | 16 GB+ | local Ollama, `http://localhost:11434/v1` |
-| 2 | weaker laptop, can't run the 8 GB Mellum2 model | much lower | `qwen2.5-coder:1.5b` locally (~1 GB) |
+| 2 | weaker laptop, can't run the 8 GB Mellum2 model | much lower | `qwen3:1.7b` locally (~1.4 GB) |
 | 3 | can't run either model locally | any | local exercises + Google Colab notebook — `notebooks/agentfix.ipynb` (**tested**) |
 
 Options 1 and 2 run on macOS, Linux, WSL2, and native Windows — the per-OS install commands are in
@@ -194,40 +194,46 @@ fallback and not the instruction:
 
 The `ollama create` above makes all four rows unnecessary. Do that instead.
 
-## Option 2: Qwen local — the 1 GB fallback
+## Option 2: Qwen3 local — the 1.4 GB fallback
 
 macOS, Linux, WSL2:
 
 ```bash
-ollama pull qwen2.5-coder:1.5b
-printf 'FROM qwen2.5-coder:1.5b\nPARAMETER num_ctx 16384\n' > /tmp/Modelfile.agentfix-qwen
-ollama create agentfix-qwen -f /tmp/Modelfile.agentfix-qwen
-MELLUM_MODEL=agentfix-qwen uv run agentfix doctor
-MELLUM_MODEL=agentfix-qwen uv run agentfix solve tasks/workshop/01-shopcart --verbose
+ollama pull qwen3:1.7b
+printf 'FROM qwen3:1.7b\nPARAMETER num_ctx 16384\n' > /tmp/Modelfile.agentfix-qwen3
+ollama create agentfix-qwen3 -f /tmp/Modelfile.agentfix-qwen3
+MELLUM_MODEL=agentfix-qwen3 uv run agentfix doctor
+MELLUM_MODEL=agentfix-qwen3 uv run agentfix solve tasks/workshop/01-shopcart --verbose
 ```
 
 Native Windows PowerShell — same four steps, but there is no `/tmp` and no `VAR=value command`
 prefix, so the Modelfile goes in the repo and the variable is set for the session:
 
 ```powershell
-ollama pull qwen2.5-coder:1.5b
-Set-Content Modelfile.agentfix-qwen @('FROM qwen2.5-coder:1.5b', 'PARAMETER num_ctx 16384')
-ollama create agentfix-qwen -f Modelfile.agentfix-qwen
-$env:MELLUM_MODEL = 'agentfix-qwen'
+ollama pull qwen3:1.7b
+Set-Content Modelfile.agentfix-qwen3 @('FROM qwen3:1.7b', 'PARAMETER num_ctx 16384')
+ollama create agentfix-qwen3 -f Modelfile.agentfix-qwen3
+$env:MELLUM_MODEL = 'agentfix-qwen3'
 uv run agentfix doctor
 uv run agentfix solve tasks/workshop/01-shopcart --verbose
 ```
 
 `$env:MELLUM_MODEL` stays set for the rest of that PowerShell session — use
 `Remove-Item Env:\MELLUM_MODEL` to go back to Mellum2. (In `cmd.exe` it is
-`set MELLUM_MODEL=agentfix-qwen`.)
+`set MELLUM_MODEL=agentfix-qwen3`.)
 
 The `ollama create` is for the same reason as Option 1: without it the context is 4,096 and long
 runs lose their own history. Skipping it makes `doctor`'s `context window` check fail.
 
-Smaller and faster, but noticeably less reliable at multi-step tool use than Mellum2 — expect it
-to need more steps, or to fail tasks Mellum2 solves. Good enough to see the loop work; not the
-demo model.
+If you swap in a different small model here, check that it emits real tool calls. Many small
+models — coder-tuned ones especially — print the call as ordinary text instead of making one, and
+then `tool_calls` comes back empty, no tool ever runs, and the loop you built never gets to do
+anything. `qwen3:1.7b` emits real tool calls.
+
+It is a much smaller model than Mellum2 and may not do as well — expect it to need more steps, or
+to fail a task Mellum2 solves. It also reasons before it acts, so turns take longer. Read the
+`--verbose` trace rather than the verdict: what matters here is that the loop behaves correctly.
+Good enough to see that; not the demo model.
 
 ## Option 3: local exercises + Google Colab for the model (tested)
 
@@ -252,7 +258,7 @@ design. Nothing is broken and there is nothing to fix.
 
 **Run the real model in the browser.** Open `notebooks/agentfix.ipynb` in Google Colab when you
 reach the point of running the agent for real. The notebook does only that step: it installs
-Ollama inside the Colab runtime, derives `agentfix-qwen` with `num_ctx 16384`, puts the finished
+Ollama inside the Colab runtime, derives `agentfix-qwen3` with `num_ctx 16384`, puts the finished
 agent in place, runs `agentfix doctor` there, and then `agentfix solve` on the workshop tasks.
 That `doctor` run — in Colab, not on the laptop — is the one that has to pass.
 

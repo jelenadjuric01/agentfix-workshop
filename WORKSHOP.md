@@ -4,7 +4,7 @@ Read `README.md`'s setup-option table and
 `ARCHITECTURE.md` before the session; this document is what to run and say, minute by minute.
 
 The three setup options are the ones `README.md` names: **Option 1** Mellum2 locally (16 GB+),
-**Option 2** Qwen `2.5-coder:1.5b` locally (the ~1 GB fallback), **Option 3** exercises locally
+**Option 2** `qwen3:1.7b` locally (the ~1.4 GB fallback), **Option 3** exercises locally
 plus Google Colab for the real-model run.
 
 ## Pre-workshop checklist
@@ -22,7 +22,7 @@ plus Google Colab for the real-model run.
       `notebooks/agentfix.ipynb` covers the real-model run in the browser (it runs its own
       `doctor` in Colab — that is the output to collect from them).
 - [ ] USB sticks prepared with the model GGUF, for anyone whose wifi can't do 8 GB on the day.
-- [ ] Endpoint decision made per student: Option 1 (Mellum2 local), Option 2 (Qwen 1.5B local),
+- [ ] Endpoint decision made per student: Option 1 (Mellum2 local), Option 2 (qwen3:1.7b local),
       or Option 3 (exercises local, Colab for the real model) — `doctor`'s `ram` line now says
       this for you, so collect it rather than asking people.
 - [ ] `git checkout solutions` tested end to end on the instructor machine (see 0:08 below).
