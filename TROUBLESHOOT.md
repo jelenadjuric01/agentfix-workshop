@@ -219,7 +219,7 @@ uv run pytest tests/test_docker_backend.py -v                # 20 passed, no ski
 
 Leaving off the trailing `.` is the usual mistake. On native Windows the subprocess backend applies
 no resource limits at all (the POSIX `resource` module does not exist there) — if you need real
-isolation on Windows, use Docker or WSL2. See "Platform notes" in the README.
+isolation on Windows, use Docker or WSL2.
 </details>
 
 ## Nothing here matches

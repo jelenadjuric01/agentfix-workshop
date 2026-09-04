@@ -25,8 +25,9 @@ everything else this workshop installed.
 | 3 | can't run either model locally | any | local exercises + Google Colab notebook — `notebooks/agentfix.ipynb` (**tested**) |
 
 Options 1 and 2 run on macOS, Linux, WSL2, and native Windows — the per-OS install commands are in
-the local setup sections below, and the handful of differences that actually matter (sandbox limits,
-the RAM check) are in [Platform notes](#platform-notes). Option 3 needs only a browser.
+the local setup sections below. Only macOS has been run end to end here; native Windows is the one
+path with a real gap, and the Windows sections below say what it is. Option 3 needs only a
+browser.
 
 Windows users: prefer WSL2.
 
@@ -76,8 +77,8 @@ just slower than the numbers below.
 <summary><b>Windows — WSL2 (recommended)</b></summary>
 
 Run the workshop inside WSL2 and treat it as Linux. This is the Windows path to prefer: the
-sandbox that executes the agent's test runs is POSIX-shaped (see "Platform notes" below), so WSL2
-avoids the one part of this repo that is untested on native Windows.
+sandbox that executes the agent's test runs gets its limits from the POSIX `resource` module, which
+does not exist on native Windows, so WSL2 avoids the one part of this repo that is untested there.
 
 In PowerShell, once:
 
@@ -114,10 +115,12 @@ The installer runs Ollama as a background app, so the server is already on `loca
 for the tray icon). Then use the same commands as everywhere else — `uv run ...` is identical in
 PowerShell, and forward slashes in task paths are fine.
 
-Two caveats, both detailed under "Platform notes": `agentfix doctor` cannot read RAM on Windows and
-skips that check rather than failing it, and the subprocess sandbox has not been run on native
-Windows. If `uv run agentfix doctor` reports a `sandbox` failure, switch to WSL2 rather than
-debugging it during the workshop.
+Two caveats. `agentfix doctor` cannot read RAM on Windows, so it skips that check rather than
+failing it — check the machine's memory by hand. And the subprocess sandbox has not been run on
+native Windows: the POSIX `resource` module it uses for CPU, file-size and process caps does not
+exist there, so those limits are simply not applied and a runaway test is stopped only by the
+10-second wall-clock timeout. If `uv run agentfix doctor` reports a `sandbox` failure, switch to
+WSL2 rather than debugging it during the workshop.
 </details>
 
 ### Step 2 — pull and derive the model
@@ -576,10 +579,11 @@ The wall-clock figure is exactly why that eval segment is demo-only in the works
 not fit in a 90-minute session as a live activity. `results/precomputed/` ships both runs so
 students can discuss the numbers without waiting for them.
 
+## Tighter sandbox isolation
 
-
-If you want the tighter isolation on any platform, build the image once and switch backends — the
-commands are the same everywhere:
+The default subprocess backend is what `doctor` checks and what the workshop runs on. If you want
+the tighter isolation on any platform, build the image once and switch backends — the commands are
+the same everywhere:
 
 ```bash
 docker build -t agentfix-sandbox -f Dockerfile.sandbox .
