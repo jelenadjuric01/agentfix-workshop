@@ -576,45 +576,7 @@ The wall-clock figure is exactly why that eval segment is demo-only in the works
 not fit in a 90-minute session as a live activity. `results/precomputed/` ships both runs so
 students can discuss the numbers without waiting for them.
 
-For contrast, the predecessor project's baseline: `Qwen/Qwen2.5-Coder-1.5B-Instruct` on a GPU, over
-all 164 HumanEvalFix Python tasks, **pass@1 = 0.305** (50/164) with greedy decoding. That run was
-**single-shot** — one patch per task, graded by running the tests, no loop and no tools, which is the
-difference that matters here and not the parameter count. It also came with a 13-config decoding
-sweep (temperature, top-p, beams, repetition penalty) spanning 0.262–0.317; with one run per config
-and n=164, the binomial standard error is ±0.036, so that whole spread is noise. Only 31 of the 164
-tasks changed verdict across all 13 configs. Decoding parameters bought almost nothing; adding a
-loop and a test-execution oracle roughly doubled the fix rate.
 
-Not an apples-to-apples comparison — different task count, different hardware, different harness —
-but the mechanism is the point. The raw reports used to ship in `results/legacy/`; they were removed
-from the repo, and `git log --diff-filter=D -- results/legacy` finds the commit that dropped them if
-you want them back.
-
-## Platform notes
-
-What actually differs between operating systems, beyond the install commands:
-
-| | macOS | Linux | WSL2 | native Windows |
-|---|---|---|---|---|
-| verified here | yes (M4, 24 GB) | no | no | no |
-| `doctor` RAM check | `sysctl` + `vm_stat` | `/proc/meminfo` | `/proc/meminfo`, reports WSL2's slice | skipped with a PASS — check by hand |
-| subprocess sandbox limits | CPU + file size + process count | CPU + file size + process count + 2 GB address space | same as Linux | none applied |
-| Docker sandbox | Docker Desktop | Docker Engine | Docker Desktop w/ WSL2 backend, or Engine inside WSL2 | Docker Desktop |
-
-Only the macOS column has been run end to end. Linux, WSL2, and native Windows are documented from
-the code and the vendors' own install instructions, not from a run in this environment — if you hit
-something the README gets wrong, tell the instructor so this table can be corrected.
-
-The sandbox is the one place where the difference is structural rather than cosmetic.
-`src/agentfix/sandbox/subprocess_backend.py` runs each test execution in a child process with a
-stripped environment (`PATH=/usr/bin:/bin`) and POSIX `resource` limits applied through
-`preexec_fn`. Both of those are POSIX-only: on native Windows the `resource` import fails and
-`preexec_fn` is skipped, so the child gets the stripped environment but **no CPU, file-size, or
-process caps** — a runaway test cannot be cut off by anything except the 10-second wall-clock
-timeout. `RLIMIT_AS` (the 2 GB address-space cap) is deliberately Linux-only as well, because
-applying it on Apple Silicon aborts interpreter startup. This is the reason WSL2 is the recommended
-Windows path, and it is also why the `sandbox` line in `doctor` is worth reading rather than
-skimming: it is the only signal that test execution works at all on your machine.
 
 If you want the tighter isolation on any platform, build the image once and switch backends — the
 commands are the same everywhere:
